@@ -1,0 +1,11 @@
+/node_modules
+/dist
+/.angular
+/.idea
+/.vscode/*
+!/.vscode/extensions.json
+!/.vscode/launch.json
+!/.vscode/tasks.json
+*.log
+.DS_Store
+Thumbs.db

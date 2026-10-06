@@ -1,0 +1,23 @@
+<div class="shell">
+  <aside>
+    <div class="brand">Casual Booking</div>
+    <div class="role">
+      {{auth.session()?.displayName}}
+      <small>{{auth.role()}}</small>
+    </div>
+    <nav>
+      <a *ngFor="let l of links()" [routerLink]="l[1]" routerLinkActive="active">{{l[0]}}</a>
+    </nav>
+    <button class="logout" (click)="auth.logout()">Sign out</button>
+  </aside>
+  <main>
+    <header>
+      <div>
+        <h2>Workforce Scheduling</h2>
+        
+      </div>
+      
+    </header>
+    <div class="content"><router-outlet/></div>
+  </main>
+</div>
