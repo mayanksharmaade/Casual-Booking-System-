@@ -95,6 +95,8 @@ public class EmployeeConfiguration : IEntityTypeConfiguration<Employee>
     public void Configure(EntityTypeBuilder<Employee> b)
     {
         b.HasOne(x => x.Store).WithMany(x => x.Employees).HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+        b.Property(x => x.EmployeeCode).HasMaxLength(50).IsRequired();
+        b.HasIndex(x => x.EmployeeCode).IsUnique();
         b.Property(x => x.FirstName).HasMaxLength(100).IsRequired();
         b.Property(x => x.LastName).HasMaxLength(100).IsRequired();
         b.Property(x => x.BaseHourlyRate).HasPrecision(18, 2);

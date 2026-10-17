@@ -36,6 +36,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        builder.Entity<ApplicationUser>(b =>
+        {
+            b.Property(x => x.EmployeeCode).HasMaxLength(50);
+            b.HasIndex(x => x.EmployeeCode).IsUnique().HasFilter("[EmployeeCode] IS NOT NULL");
+        });
+
         builder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
     }
 }

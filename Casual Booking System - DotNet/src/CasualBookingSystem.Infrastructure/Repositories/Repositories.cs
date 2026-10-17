@@ -153,6 +153,9 @@ public class EmployeeRepository(ApplicationDbContext db) : IEmployeeRepository
     public Task<Employee?> GetByUserIdAsync(Guid userId) =>
         db.Employees.FirstOrDefaultAsync(x => x.UserId == userId);
 
+    public Task<bool> EmployeeCodeExistsAsync(string employeeCode) =>
+        db.Employees.AnyAsync(x => x.EmployeeCode == employeeCode);
+
     public async Task<IReadOnlyList<Employee>> GetByStoreAsync(int storeId) =>
         await db.Employees.AsNoTracking()
             .Where(x => x.StoreId == storeId)

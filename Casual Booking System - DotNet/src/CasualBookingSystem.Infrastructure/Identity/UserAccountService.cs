@@ -41,12 +41,18 @@ public class UserAccountService(
         string lastName,
         UserRole role,
         RegistrationStatus approvalStatus,
-        int? storeId = null)
+        int? storeId = null,
+        string? employeeId = null)
     {
         var normalizedEmail = email.Trim();
 
         if (await userManager.FindByEmailAsync(normalizedEmail) is not null)
             throw new BusinessRuleException("Email is already registered.");
+
+        var normalizedEmployeeId = string.IsNullOrWhiteSpace(employeeId) ? null : employeeId.Trim().ToUpperInvariant();
+        if (normalizedEmployeeId is not null &&
+            await userManager.Users.AnyAsync(x => x.EmployeeCode == normalizedEmployeeId))
+            throw new BusinessRuleException("Employee ID is already registered.");
 
         var user = new ApplicationUser
         {
@@ -59,6 +65,7 @@ public class UserAccountService(
             ApprovalStatus = approvalStatus,
             IsActive = approvalStatus == RegistrationStatus.Approved,
             StoreId = storeId,
+            EmployeeCode = normalizedEmployeeId,
             EmailConfirmed = true
         };
 
@@ -139,5 +146,5 @@ public class UserAccountService(
     }
 
     private static UserAccountDto ToDto(ApplicationUser u) =>
-        new(u.Id, u.Email!, u.FirstName, u.LastName, u.PrimaryRole, u.ApprovalStatus, u.IsActive, u.StoreId);
+        new(u.Id, u.Email!, u.EmployeeCode, u.FirstName, u.LastName, u.PrimaryRole, u.ApprovalStatus, u.IsActive, u.StoreId);
 }

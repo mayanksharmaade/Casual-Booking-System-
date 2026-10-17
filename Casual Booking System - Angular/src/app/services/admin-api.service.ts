@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import {
   AdminDashboard, AdminStore, AreaManagerAdmin, AuditLog, PayRate, PublicHoliday,
-  Registration, SystemReport, UserAccount, Zone
+  PagedResult, Registration, SystemReport, UserAccount, Zone
 } from '../models/api.models';
 
 @Injectable({providedIn:'root'})
@@ -12,9 +12,9 @@ export class AdminApiService {
   constructor(private http:HttpClient){}
 
   dashboard(){ return this.http.get<AdminDashboard>(`${this.base}/dashboard`); }
-  users(){ return this.http.get<UserAccount[]>(`${this.base}/users`); }
-  stores(){ return this.http.get<AdminStore[]>(`${this.base}/stores`); }
-  registrations(){ return this.http.get<Registration[]>(`${this.base}/registrations`); }
+  users(search='',page=1,pageSize=10){ return this.http.get<PagedResult<UserAccount>>(`${this.base}/users`,{params:{search,page,pageSize}}); }
+  stores(search='',page=1,pageSize=10){ return this.http.get<PagedResult<AdminStore>>(`${this.base}/stores`,{params:{search,page,pageSize}}); }
+  registrations(search='',page=1,pageSize=10){ return this.http.get<PagedResult<Registration>>(`${this.base}/registrations`,{params:{search,page,pageSize}}); }
 
   setUserActive(id:string,on:boolean){ return this.http.put<void>(`${this.base}/users/${id}/active/${on}`,{}); }
   setStoreActive(id:number,on:boolean){ return this.http.put<void>(`${this.base}/stores/${id}/active/${on}`,{}); }

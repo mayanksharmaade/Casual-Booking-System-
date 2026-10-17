@@ -51,6 +51,11 @@ import { AuthService } from '../../services/auth.service';
             </label>
 
             <label>
+              Manager Employee ID
+              <input formControlName="managerEmployeeId" placeholder="e.g. EMP-20010">
+            </label>
+
+            <label>
               Manager first name
               <input formControlName="managerFirstName">
             </label>
@@ -61,8 +66,8 @@ import { AuthService } from '../../services/auth.service';
             </label>
 
             <label>
-              Store code
-              <input formControlName="storeCode">
+              Store ID
+              <input formControlName="storeCode" placeholder="e.g. ST-0012">
             </label>
 
             <label>
@@ -153,6 +158,11 @@ export class RegisterStoreComponent implements OnInit {
     ],
 
     password: [
+      '',
+      Validators.required
+    ],
+
+    managerEmployeeId: [
       '',
       Validators.required
     ],

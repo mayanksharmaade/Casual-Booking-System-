@@ -26,6 +26,7 @@ interface VolunteerDayDraft {
     <div class="panel">
       <h3>Add PT / FT / Volunteer</h3>
       <div class="form-grid">
+        <input [(ngModel)]="employeeId" placeholder="Employee ID">
         <input [(ngModel)]="firstName" placeholder="First name">
         <input [(ngModel)]="lastName" placeholder="Last name">
         <select [(ngModel)]="employeeType">
@@ -44,6 +45,7 @@ interface VolunteerDayDraft {
     <div class="panel">
       <h3>Create Assistant Manager login</h3>
       <div class="form-grid">
+        <input [(ngModel)]="amEmployeeId" placeholder="Employee ID">
         <input [(ngModel)]="amFirst" placeholder="First name">
         <input [(ngModel)]="amLast" placeholder="Last name">
         <input [(ngModel)]="amEmail" placeholder="Email">
@@ -110,10 +112,19 @@ interface VolunteerDayDraft {
     <div class="callout error-box" *ngIf="error">{{error}}</div>
 
     <div class="panel">
+      <div class="form-grid staff-search">
+        <input [(ngModel)]="staffSearch" (ngModelChange)="staffPage=1" placeholder="Search Employee ID or name">
+        <select [(ngModel)]="staffPageSize" (change)="staffPage=1">
+          <option [ngValue]="10">10 per page</option>
+          <option [ngValue]="25">25 per page</option>
+          <option [ngValue]="50">50 per page</option>
+        </select>
+      </div>
       <table>
-        <thead><tr><th>Name</th><th>Type</th><th>Phone</th><th>Skills</th><th>Base Rate</th></tr></thead>
+        <thead><tr><th>Employee ID</th><th>Name</th><th>Type</th><th>Phone</th><th>Skills</th><th>Base Rate</th></tr></thead>
         <tbody>
-          <tr *ngFor="let e of rows">
+          <tr *ngFor="let e of visibleStaff">
+            <td>{{e.employeeId||'—'}}</td>
             <td>{{e.firstName}} {{e.lastName}}</td>
             <td>{{label(e.employeeType)}}</td>
             <td>{{e.phone||'—'}}</td>
@@ -122,20 +133,27 @@ interface VolunteerDayDraft {
           </tr>
         </tbody>
       </table>
+      <div class="staff-pager" *ngIf="filteredStaff.length">
+        <button type="button" (click)="staffPage=staffPage-1" [disabled]="staffPage<=1">Previous</button>
+        <span>Page {{staffPage}} of {{staffTotalPages}} · {{filteredStaff.length}} records</span>
+        <button type="button" (click)="staffPage=staffPage+1" [disabled]="staffPage>=staffTotalPages">Next</button>
+      </div>
     </div>
   `,
   styles:[`
     .volunteer-grid{display:grid;gap:.65rem;margin:1rem 0}
     .volunteer-day{display:grid;grid-template-columns:120px 150px auto 150px;align-items:center;gap:.65rem;padding:.7rem;border:1px solid #d7dee8;border-radius:10px;background:#fff}
     .day-check{display:flex;align-items:center;gap:.45rem}
+    .staff-search{margin-bottom:1rem}.staff-pager{display:flex;justify-content:center;align-items:center;gap:1rem;margin-top:1rem}
     @media(max-width:720px){.volunteer-day{grid-template-columns:1fr 1fr}.volunteer-day span{display:none}}
   `],
   styleUrls:['../page.scss']
 })
 export class StaffComponent implements OnInit {
   rows:Employee[]=[];
-  firstName='';lastName='';employeeType=2;phone='';skills='';
-  amFirst='';amLast='';amEmail='';amPassword='';
+  employeeId='';firstName='';lastName='';employeeType=2;phone='';skills='';
+  amEmployeeId='';amFirst='';amLast='';amEmail='';amPassword='';
+  staffSearch='';staffPage=1;staffPageSize=10;
   message='';error='';
   savingStaff=false;savingAssistant=false;savingPattern=false;
   label=employeeTypeLabel;
@@ -155,6 +173,17 @@ export class StaffComponent implements OnInit {
   ngOnInit(){this.load();}
 
   get volunteers(){return this.rows.filter(x=>x.employeeType===4 && x.isActive);}
+  get filteredStaff(){
+    const term=this.staffSearch.trim().toLowerCase();
+    if(!term)return this.rows;
+    return this.rows.filter(x=>x.employeeId?.toLowerCase().includes(term)||`${x.firstName} ${x.lastName}`.toLowerCase().includes(term));
+  }
+  get staffTotalPages(){return Math.max(1,Math.ceil(this.filteredStaff.length/this.staffPageSize));}
+  get visibleStaff(){
+    if(this.staffPage>this.staffTotalPages)this.staffPage=this.staffTotalPages;
+    const start=(this.staffPage-1)*this.staffPageSize;
+    return this.filteredStaff.slice(start,start+this.staffPageSize);
+  }
 
   load(){
     this.api.employees().subscribe({
@@ -170,9 +199,10 @@ export class StaffComponent implements OnInit {
   }
 
   add(){
-    if(!this.firstName||!this.lastName||this.savingStaff)return;
+    if(!this.employeeId||!this.firstName||!this.lastName||this.savingStaff)return;
     this.savingStaff=true;this.error='';this.message='';
     this.api.createEmployee({
+      employeeId:this.employeeId,
       firstName:this.firstName,
       lastName:this.lastName,
       employeeType:this.employeeType,
@@ -183,7 +213,7 @@ export class StaffComponent implements OnInit {
     .subscribe({
       next:created=>{
         this.rows=[...this.rows,created].sort((a,b)=>a.firstName.localeCompare(b.firstName));
-        this.firstName=this.lastName=this.phone=this.skills='';
+        this.employeeId=this.firstName=this.lastName=this.phone=this.skills='';
         this.message=created.employeeType===4
           ? 'Volunteer added. You can set the volunteer weekly schedule below.'
           : 'Paid staff member added. Add roster dates from the Roster screen.';
@@ -194,17 +224,17 @@ export class StaffComponent implements OnInit {
   }
 
   addAssistant(){
-    if(!this.amEmail||!this.amPassword||this.savingAssistant)return;
+    if(!this.amEmployeeId||!this.amEmail||!this.amPassword||this.savingAssistant)return;
     this.savingAssistant=true;this.error='';this.message='';
     this.api.createAssistantManager({
-      email:this.amEmail,password:this.amPassword,
+      email:this.amEmail,password:this.amPassword,employeeId:this.amEmployeeId,
       firstName:this.amFirst,lastName:this.amLast
     })
     .pipe(finalize(()=>{this.savingAssistant=false;this.cdr.detectChanges();}))
     .subscribe({
       next:()=>{
         this.message='Assistant Manager account created and linked to this Store.';
-        this.amEmail=this.amPassword=this.amFirst=this.amLast='';
+        this.amEmployeeId=this.amEmail=this.amPassword=this.amFirst=this.amLast='';
         this.load();
       },
       error:e=>{this.error=e?.error?.message??'Unable to create Assistant Manager.';this.cdr.detectChanges();}

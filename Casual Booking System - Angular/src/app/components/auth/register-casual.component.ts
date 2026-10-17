@@ -63,6 +63,11 @@ import { AuthService } from '../../services/auth.service';
           </div>
 
           <label>
+            Employee ID
+            <input formControlName="employeeId" placeholder="e.g. EMP-10025">
+          </label>
+
+          <label>
             Phone
             <input formControlName="phone">
           </label>
@@ -156,6 +161,11 @@ export class RegisterCasualComponent implements OnInit {
     ],
 
     lastName: [
+      '',
+      Validators.required
+    ],
+
+    employeeId: [
       '',
       Validators.required
     ],

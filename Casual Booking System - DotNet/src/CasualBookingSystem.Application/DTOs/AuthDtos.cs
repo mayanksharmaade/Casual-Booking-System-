@@ -8,17 +8,24 @@ public record AuthResponse(string Token, Guid UserId, string Email, string Role,
 public record RegisterCasualRequest(
     string Email,
     string Password,
+    string EmployeeId,
     string FirstName,
     string LastName,
     string Phone,
     string City,
     int ZoneId);
 
-public record RegisterAreaManagerRequest(string Email, string Password, string FirstName, string LastName);
+public record RegisterAreaManagerRequest(
+    string Email,
+    string Password,
+    string EmployeeId,
+    string FirstName,
+    string LastName);
 
 public record RegisterStoreRequest(
     string Email,
     string Password,
+    string ManagerEmployeeId,
     string ManagerFirstName,
     string ManagerLastName,
     string StoreCode,
@@ -30,6 +37,7 @@ public record RegisterStoreRequest(
 public record UserAccountDto(
     Guid UserId,
     string Email,
+    string? EmployeeId,
     string FirstName,
     string LastName,
     UserRole Role,

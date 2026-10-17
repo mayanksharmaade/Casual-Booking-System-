@@ -13,9 +13,9 @@ public interface IAuthService
 public interface IAdminService
 {
     Task<AdminDashboardDto> GetDashboardAsync();
-    Task<IReadOnlyList<RegistrationDto>> GetPendingRegistrationsAsync();
-    Task<IReadOnlyList<UserAccountDto>> GetUsersAsync();
-    Task<IReadOnlyList<StoreAdminDto>> GetStoresAsync();
+    Task<PagedResultDto<RegistrationDto>> GetPendingRegistrationsAsync(string? search, int page, int pageSize);
+    Task<PagedResultDto<UserAccountDto>> GetUsersAsync(string? search, int page, int pageSize);
+    Task<PagedResultDto<StoreAdminDto>> GetStoresAsync(string? search, int page, int pageSize);
     Task ApproveAsync(Guid adminUserId, Guid userId);
     Task RejectAsync(Guid adminUserId, Guid userId);
     Task SetActiveAsync(Guid adminUserId, Guid userId, bool isActive);

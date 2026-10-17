@@ -50,6 +50,7 @@ public interface IEmployeeRepository
 {
     Task<Employee?> GetByIdAsync(int id);
     Task<Employee?> GetByUserIdAsync(Guid userId);
+    Task<bool> EmployeeCodeExistsAsync(string employeeCode);
     Task<IReadOnlyList<Employee>> GetByStoreAsync(int storeId);
     Task AddAsync(Employee employee);
 

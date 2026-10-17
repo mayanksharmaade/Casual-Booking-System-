@@ -18,7 +18,8 @@ public class StoreService(
     IRatingRepository ratings,
     ISkillRepository skills,
     IZoneRepository zones,
-    IPublicHolidayRepository publicHolidays) : IStoreService
+    IPublicHolidayRepository publicHolidays,
+    IEmailService emailService) : IStoreService
 {
     private async Task<(UserAccountDto User, Store Store)> StoreContext(Guid userId)
     {
@@ -52,6 +53,7 @@ public class StoreService(
             await employees.AddAsync(new Employee
             {
                 StoreId = store.Id,
+                EmployeeCode = account.EmployeeId ?? $"USR-{account.UserId:N}",
                 UserId = account.UserId,
                 EmployeeType = account.Role == UserRole.StoreManager ? EmployeeType.StoreManager : EmployeeType.AssistantManager,
                 FirstName = account.FirstName,
@@ -343,7 +345,7 @@ public class StoreService(
         var (_, store) = await StoreContext(storeUserId);
         await EnsureManagerEmployeesAsync(store);
         return (await employees.GetByStoreAsync(store.Id))
-            .Select(x => new EmployeeDto(x.Id, x.FirstName, x.LastName, x.EmployeeType, x.Phone, x.SkillSummary, x.BaseHourlyRate, x.IsActive))
+            .Select(x => new EmployeeDto(x.Id, x.EmployeeCode, x.FirstName, x.LastName, x.EmployeeType, x.Phone, x.SkillSummary, x.BaseHourlyRate, x.IsActive))
             .ToList();
     }
 
@@ -353,12 +355,19 @@ public class StoreService(
 
         if (request.EmployeeType is EmployeeType.Casual or EmployeeType.StoreManager or EmployeeType.AssistantManager)
             throw new BusinessRuleException("Only Part-Time, Full-Time and Volunteer staff can be created here.");
+        if (string.IsNullOrWhiteSpace(request.EmployeeId))
+            throw new BusinessRuleException("Employee ID is required.");
         if (string.IsNullOrWhiteSpace(request.FirstName) || string.IsNullOrWhiteSpace(request.LastName))
             throw new BusinessRuleException("Employee first and last name are required.");
+
+        var employeeCode = request.EmployeeId.Trim().ToUpperInvariant();
+        if (await employees.EmployeeCodeExistsAsync(employeeCode))
+            throw new BusinessRuleException("Employee ID already exists.");
 
         var employee = new Employee
         {
             StoreId = store.Id,
+            EmployeeCode = employeeCode,
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName.Trim(),
             EmployeeType = request.EmployeeType,
@@ -369,12 +378,15 @@ public class StoreService(
         await employees.AddAsync(employee);
         await employees.SaveChangesAsync();
 
-        return new EmployeeDto(employee.Id, employee.FirstName, employee.LastName, employee.EmployeeType, employee.Phone, employee.SkillSummary, employee.BaseHourlyRate, employee.IsActive);
+        return new EmployeeDto(employee.Id, employee.EmployeeCode, employee.FirstName, employee.LastName, employee.EmployeeType, employee.Phone, employee.SkillSummary, employee.BaseHourlyRate, employee.IsActive);
     }
 
     public async Task CreateAssistantManagerAsync(Guid storeUserId, CreateAssistantManagerRequest request)
     {
         var (_, store) = await StoreContext(storeUserId);
+        if (string.IsNullOrWhiteSpace(request.EmployeeId))
+            throw new BusinessRuleException("Employee ID is required.");
+
         var userId = await users.CreateUserAsync(
             request.Email,
             request.Password,
@@ -382,11 +394,13 @@ public class StoreService(
             request.LastName,
             UserRole.AssistantManager,
             RegistrationStatus.Approved,
-            store.Id);
+            store.Id,
+            request.EmployeeId.Trim());
 
         await employees.AddAsync(new Employee
         {
             StoreId = store.Id,
+            EmployeeCode = request.EmployeeId.Trim().ToUpperInvariant(),
             UserId = userId,
             EmployeeType = EmployeeType.AssistantManager,
             FirstName = request.FirstName.Trim(),
@@ -1039,6 +1053,26 @@ public class StoreService(
             Message = $"{store.Name}: {request.StartDateTime:g} - {request.EndDateTime:g}"
         });
         await notifications.SaveChangesAsync();
+
+        var casualAccount = await users.GetByIdAsync(casual.UserId);
+        if (casualAccount is not null)
+        {
+            var subject = isEmergency
+                ? $"Emergency shift request from {store.Name}"
+                : $"New shift request from {store.Name}";
+
+            var body = $"""
+                <h2>{subject}</h2>
+                <p>Hello {casual.FirstName},</p>
+                <p>You have received a new booking request from <strong>{store.Name}</strong>.</p>
+                <p><strong>Shift:</strong> {request.StartDateTime:f} - {request.EndDateTime:t}</p>
+                <p><strong>Estimated paid hours:</strong> {paidHours:0.##}</p>
+                <p><strong>Estimated cost:</strong> {booking.EstimatedCost:C}</p>
+                <p>Please sign in to the Casual Booking System to accept or decline the request.</p>
+                """;
+
+            await emailService.SendAsync(casualAccount.Email, subject, body);
+        }
 
         return ServiceHelpers.ToDto(booking);
     }

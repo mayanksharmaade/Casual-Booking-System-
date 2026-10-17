@@ -48,8 +48,11 @@ public class AdminService(
             staffingAlerts);
     }
 
-    public async Task<IReadOnlyList<RegistrationDto>> GetPendingRegistrationsAsync()
+    public async Task<PagedResultDto<RegistrationDto>> GetPendingRegistrationsAsync(string? search, int page, int pageSize)
     {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 5, 100);
+
         var accounts = await users.GetPendingAsync();
         var allStores = await stores.GetAllAsync();
         var result = new List<RegistrationDto>();
@@ -70,6 +73,7 @@ public class AdminService(
                 account.Email,
                 account.FirstName,
                 account.LastName,
+                account.EmployeeId,
                 account.Role.ToString(),
                 account.ApprovalStatus,
                 account.StoreId,
@@ -87,22 +91,79 @@ public class AdminService(
                 store?.Address));
         }
 
-        return result;
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            result = result.Where(x =>
+                    x.FirstName.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    x.LastName.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    $"{x.FirstName} {x.LastName}".Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    x.Email.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    (x.EmployeeId?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (x.StoreCode?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (x.StoreName?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
+
+        return Page(result.OrderBy(x => x.FirstName).ThenBy(x => x.LastName).ToList(), page, pageSize);
     }
 
-    public Task<IReadOnlyList<UserAccountDto>> GetUsersAsync() => users.GetAllAsync();
+    public async Task<PagedResultDto<UserAccountDto>> GetUsersAsync(string? search, int page, int pageSize)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 5, 100);
 
-    public async Task<IReadOnlyList<StoreAdminDto>> GetStoresAsync() =>
-        (await stores.GetAllAsync())
-        .Select(x => new StoreAdminDto(
-            x.Id,
-            x.Code,
-            x.Name,
-            x.City,
-            x.Zone?.Name ?? string.Empty,
-            x.RegistrationStatus,
-            x.IsActive))
-        .ToList();
+        var list = (await users.GetAllAsync()).ToList();
+        var allStores = await stores.GetAllAsync();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            list = list.Where(x =>
+            {
+                var store = x.StoreId.HasValue ? allStores.FirstOrDefault(s => s.Id == x.StoreId.Value) : null;
+                return x.FirstName.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                       x.LastName.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                       $"{x.FirstName} {x.LastName}".Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                       x.Email.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                       (x.EmployeeId?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                       (store?.Code.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                       (store?.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false);
+            }).ToList();
+        }
+
+        return Page(list.OrderBy(x => x.FirstName).ThenBy(x => x.LastName).ToList(), page, pageSize);
+    }
+
+    public async Task<PagedResultDto<StoreAdminDto>> GetStoresAsync(string? search, int page, int pageSize)
+    {
+        page = Math.Max(page, 1);
+        pageSize = Math.Clamp(pageSize, 5, 100);
+
+        var list = (await stores.GetAllAsync())
+            .Select(x => new StoreAdminDto(
+                x.Id,
+                x.Code,
+                x.Name,
+                x.City,
+                x.Zone?.Name ?? string.Empty,
+                x.RegistrationStatus,
+                x.IsActive))
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            list = list.Where(x =>
+                    x.Code.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    x.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    x.City.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    x.ZoneName.Contains(term, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        return Page(list.OrderBy(x => x.Name).ToList(), page, pageSize);
+    }
 
     public async Task ApproveAsync(Guid adminUserId, Guid userId)
     {
@@ -240,6 +301,7 @@ public class AdminService(
             await employees.AddAsync(new Employee
             {
                 StoreId = account.StoreId!.Value,
+                EmployeeCode = account.EmployeeId ?? $"USR-{account.UserId:N}",
                 UserId = account.UserId,
                 EmployeeType = account.Role == UserRole.StoreManager ? EmployeeType.StoreManager : EmployeeType.AssistantManager,
                 FirstName = account.FirstName,
@@ -411,6 +473,15 @@ public class AdminService(
             allUsers.Count(x => x.Role == UserRole.Casual && x.IsActive && x.ApprovalStatus == RegistrationStatus.Approved),
             staffingEvents,
             allBookings.Count(x => x.OverrideApprovedByUserId.HasValue));
+    }
+
+    private static PagedResultDto<T> Page<T>(IReadOnlyList<T> rows, int page, int pageSize)
+    {
+        var totalCount = rows.Count;
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+        page = Math.Min(page, totalPages);
+        var items = rows.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return new PagedResultDto<T>(items, page, pageSize, totalCount, totalPages);
     }
 
     private async Task Log(Guid userId, string action, string entity, string? entityId, string? details)

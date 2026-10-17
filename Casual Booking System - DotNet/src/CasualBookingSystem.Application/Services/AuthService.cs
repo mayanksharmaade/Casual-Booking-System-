@@ -23,13 +23,17 @@ public class AuthService(
         if (!zone.IsActive)
             throw new BusinessRuleException("Selected zone is not active.");
 
+        if (string.IsNullOrWhiteSpace(request.EmployeeId))
+            throw new BusinessRuleException("Employee ID is required.");
+
         var userId = await users.CreateUserAsync(
             request.Email,
             request.Password,
             request.FirstName,
             request.LastName,
             UserRole.Casual,
-            RegistrationStatus.Pending);
+            RegistrationStatus.Pending,
+            employeeId: request.EmployeeId.Trim());
 
         await casuals.AddAsync(new CasualProfile
         {
@@ -48,13 +52,17 @@ public class AuthService(
 
     public async Task RegisterAreaManagerAsync(RegisterAreaManagerRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.EmployeeId))
+            throw new BusinessRuleException("Employee ID is required.");
+
         await users.CreateUserAsync(
             request.Email,
             request.Password,
             request.FirstName,
             request.LastName,
             UserRole.AreaManager,
-            RegistrationStatus.Pending);
+            RegistrationStatus.Pending,
+            employeeId: request.EmployeeId.Trim());
     }
 
     public async Task RegisterStoreAsync(RegisterStoreRequest request)
@@ -82,6 +90,9 @@ public class AuthService(
         await stores.AddAsync(store);
         await stores.SaveChangesAsync();
 
+        if (string.IsNullOrWhiteSpace(request.ManagerEmployeeId))
+            throw new BusinessRuleException("Manager Employee ID is required.");
+
         await users.CreateUserAsync(
             request.Email,
             request.Password,
@@ -89,6 +100,7 @@ public class AuthService(
             request.ManagerLastName,
             UserRole.StoreManager,
             RegistrationStatus.Pending,
-            store.Id);
+            store.Id,
+            request.ManagerEmployeeId.Trim());
     }
 }

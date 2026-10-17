@@ -5,6 +5,14 @@ export type Role =
   | 'Casual'
   | 'AreaManager';
 
+export interface PagedResult<T> {
+  items:T[];
+  page:number;
+  pageSize:number;
+  totalCount:number;
+  totalPages:number;
+}
+
 export interface AuthResponse {
   token:string;
   userId:string;
@@ -32,6 +40,7 @@ export interface Registration {
   email:string;
   firstName:string;
   lastName:string;
+  employeeId?:string|null;
   role:string;
   status:number;
   storeId?:number|null;
@@ -82,6 +91,7 @@ export interface AuditLog {
 export interface UserAccount {
   userId:string;
   email:string;
+  employeeId?:string|null;
   firstName:string;
   lastName:string;
   role:number;
@@ -182,6 +192,7 @@ export interface StoreDashboard {
 
 export interface Employee {
   id:number;
+  employeeId:string;
   firstName:string;
   lastName:string;
   employeeType:number;

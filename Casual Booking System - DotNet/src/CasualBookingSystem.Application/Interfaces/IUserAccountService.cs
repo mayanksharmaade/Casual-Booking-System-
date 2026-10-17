@@ -4,7 +4,7 @@ namespace CasualBookingSystem.Application.Interfaces;
 public interface IUserAccountService
 {
     Task<AuthResponse?> LoginAsync(string email, string password);
-    Task<Guid> CreateUserAsync(string email, string password, string firstName, string lastName, UserRole role, RegistrationStatus approvalStatus, int? storeId = null);
+    Task<Guid> CreateUserAsync(string email, string password, string firstName, string lastName, UserRole role, RegistrationStatus approvalStatus, int? storeId = null, string? employeeId = null);
     Task<UserAccountDto?> GetByIdAsync(Guid userId);
     Task<IReadOnlyList<UserAccountDto>> GetPendingAsync();
     Task<IReadOnlyList<UserAccountDto>> GetAllAsync();

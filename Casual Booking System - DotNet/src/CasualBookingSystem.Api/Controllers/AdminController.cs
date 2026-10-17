@@ -13,13 +13,16 @@ public class AdminController(IAdminService service) : ControllerBase
     public async Task<IActionResult> Dashboard() => Ok(await service.GetDashboardAsync());
 
     [HttpGet("registrations")]
-    public async Task<IActionResult> Registrations() => Ok(await service.GetPendingRegistrationsAsync());
+    public async Task<IActionResult> Registrations([FromQuery] string? search = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10) =>
+        Ok(await service.GetPendingRegistrationsAsync(search, page, pageSize));
 
     [HttpGet("users")]
-    public async Task<IActionResult> Users() => Ok(await service.GetUsersAsync());
+    public async Task<IActionResult> Users([FromQuery] string? search = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10) =>
+        Ok(await service.GetUsersAsync(search, page, pageSize));
 
     [HttpGet("stores")]
-    public async Task<IActionResult> Stores() => Ok(await service.GetStoresAsync());
+    public async Task<IActionResult> Stores([FromQuery] string? search = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10) =>
+        Ok(await service.GetStoresAsync(search, page, pageSize));
 
     [HttpPost("registrations/{userId:guid}/approve")]
     public async Task<IActionResult> Approve(Guid userId)

@@ -67,6 +67,7 @@ public record DailyLabourItemDto(
 
 public record EmployeeDto(
     int Id,
+    string EmployeeId,
     string FirstName,
     string LastName,
     EmployeeType EmployeeType,
@@ -77,6 +78,7 @@ public record EmployeeDto(
 );
 
 public record CreateEmployeeRequest(
+    string EmployeeId,
     string FirstName,
     string LastName,
     EmployeeType EmployeeType,
@@ -233,6 +235,7 @@ public record RateCasualRequest(
 public record CreateAssistantManagerRequest(
     string Email,
     string Password,
+    string EmployeeId,
     string FirstName,
     string LastName
 );

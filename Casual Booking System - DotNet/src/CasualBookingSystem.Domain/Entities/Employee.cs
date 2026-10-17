@@ -4,6 +4,7 @@ namespace CasualBookingSystem.Domain.Entities;
 public class Employee : BaseEntity
 {
     public int StoreId { get; set; }
+    public string EmployeeCode { get; set; } = string.Empty;
     public Store? Store { get; set; }
     public Guid? UserId { get; set; }
     public EmployeeType EmployeeType { get; set; }

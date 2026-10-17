@@ -34,6 +34,7 @@ public record RegistrationDto(
     string Email,
     string FirstName,
     string LastName,
+    string? EmployeeId,
     string Role,
     RegistrationStatus Status,
     int? StoreId,

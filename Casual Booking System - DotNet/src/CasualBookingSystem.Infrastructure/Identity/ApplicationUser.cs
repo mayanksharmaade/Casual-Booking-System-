@@ -9,4 +9,5 @@ public class ApplicationUser : IdentityUser<Guid>
     public RegistrationStatus ApprovalStatus { get; set; } = RegistrationStatus.Pending;
     public bool IsActive { get; set; } = true;
     public int? StoreId { get; set; }
+    public string? EmployeeCode { get; set; }
 }
