@@ -20,7 +20,7 @@ builder.Services.AddSwaggerGen();
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
     .Get<string[]>()
-    ?? new[] { "http://localhost:4200" };
+    ?? new[] { "https://icy-mud-070b25600.4.azurestaticapps.net" };
 
 builder.Services.AddCors(options =>
 {
