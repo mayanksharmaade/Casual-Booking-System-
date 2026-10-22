@@ -206,75 +206,167 @@ public class AreaManagerService(
         var (_, managedZone) = await Context(userId);
         var paidHours = ServiceHelpers.PaidHours(start, end);
 
-        if (!string.IsNullOrWhiteSpace(city) && !string.Equals(city.Trim(), managedZone.City, StringComparison.OrdinalIgnoreCase))
-            throw new BusinessRuleException($"Area Managers in {managedZone.City} cannot search or book Casuals in another city.");
+        if (!string.IsNullOrWhiteSpace(city) &&
+            !string.Equals(city.Trim(), managedZone.City, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BusinessRuleException(
+                $"Area Managers in {managedZone.City} cannot search or book Casuals in another city.");
+        }
 
         var sameCityZones = (await zones.GetAllAsync())
-            .Where(x => x.IsActive && string.Equals(x.City, managedZone.City, StringComparison.OrdinalIgnoreCase))
+            .Where(x => x.IsActive &&
+                        string.Equals(x.City, managedZone.City, StringComparison.OrdinalIgnoreCase))
             .ToDictionary(x => x.Id);
-        if (zoneId.HasValue && (!sameCityZones.ContainsKey(zoneId.Value) || zoneId.Value == managedZone.Id))
-            throw new BusinessRuleException("Selected zone must be another active zone in the Area Manager's city.");
+
+        if (zoneId.HasValue &&
+            (!sameCityZones.ContainsKey(zoneId.Value) || zoneId.Value == managedZone.Id))
+        {
+            throw new BusinessRuleException(
+                "Selected zone must be another active zone in the Area Manager's city.");
+        }
 
         var managedStores = await stores.GetByZoneIdsAsync(new[] { managedZone.Id });
         var managedStoreIds = managedStores.Select(x => x.Id).ToArray();
-        var selectedSkills = skillIds?.Where(x => x > 0).Distinct().ToHashSet() ?? new HashSet<int>();
+
+        var selectedSkills = skillIds?
+            .Where(x => x > 0)
+            .Distinct()
+            .ToHashSet()
+            ?? new HashSet<int>();
+
         var result = new List<AreaCasualDto>();
 
-        foreach (var casual in (await casuals.SearchAsync(managedZone.City, null))
-                     .Where(x => x.IsActive && x.RegistrationStatus == RegistrationStatus.Approved && x.CurrentZoneId.HasValue))
+        var candidateCasuals = (await casuals.SearchAsync(null, null))
+            .Where(x =>
+                x.IsActive &&
+                x.RegistrationStatus == RegistrationStatus.Approved &&
+                x.CurrentZoneId.HasValue);
+
+        foreach (var casual in candidateCasuals)
         {
-            if (!sameCityZones.TryGetValue(casual.CurrentZoneId!.Value, out var currentZone)) continue;
-            if (casual.CurrentZoneId.Value == managedZone.Id) continue;
-            if (zoneId.HasValue && casual.CurrentZoneId.Value != zoneId.Value) continue;
-            if (selectedSkills.Count > 0 && !selectedSkills.All(id => casual.Skills.Any(x => x.SkillId == id))) continue;
+            if (!sameCityZones.TryGetValue(casual.CurrentZoneId!.Value, out var currentZone))
+                continue;
+
+            if (casual.CurrentZoneId.Value == managedZone.Id)
+                continue;
+
+            if (zoneId.HasValue && casual.CurrentZoneId.Value != zoneId.Value)
+                continue;
+
+            if (selectedSkills.Count > 0 &&
+                !selectedSkills.All(id => casual.Skills.Any(x => x.SkillId == id)))
+                continue;
 
             var account = await users.GetByIdAsync(casual.UserId);
+
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var q = search.Trim();
-                var matches = ($"{casual.FirstName} {casual.LastName}").Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                              casual.Phone.Contains(q, StringComparison.OrdinalIgnoreCase) ||
-                              (account?.EmployeeId?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false);
-                if (!matches) continue;
+
+                var matches =
+                    $"{casual.FirstName} {casual.LastName}"
+                        .Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    casual.Phone.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                    (account?.EmployeeId?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false);
+
+                if (!matches)
+                    continue;
             }
 
-            var available = await casuals.IsAvailableAsync(casual.Id, start, end) &&
-                            !await bookings.HasAcceptedOverlapAsync(casual.Id, start, end);
+            var available =
+                await casuals.IsAvailableAsync(casual.Id, start, end) &&
+                !await bookings.HasAcceptedOverlapAsync(casual.Id, start, end);
+
             var activeRequestExists = false;
+
             foreach (var storeId in managedStoreIds)
             {
-                if (await bookings.HasDuplicateActiveRequestAsync(storeId, casual.Id, start, end))
+                if (await bookings.HasDuplicateActiveRequestAsync(
+                        storeId,
+                        casual.Id,
+                        start,
+                        end))
                 {
                     activeRequestExists = true;
                     break;
                 }
             }
-            var rate = casual.BaseHourlyRate.HasValue ? ServiceHelpers.EffectiveHourlyRate(casual.BaseHourlyRate.Value, EmployeeType.Casual, start) : (decimal?)null;
-            var estimated = rate.HasValue ? decimal.Round(rate.Value * paidHours, 2, MidpointRounding.AwayFromZero) : (decimal?)null;
+
+            var rate = casual.BaseHourlyRate.HasValue
+                ? ServiceHelpers.EffectiveHourlyRate(
+                    casual.BaseHourlyRate.Value,
+                    EmployeeType.Casual,
+                    start)
+                : (decimal?)null;
+
+            var estimated = rate.HasValue
+                ? decimal.Round(
+                    rate.Value * paidHours,
+                    2,
+                    MidpointRounding.AwayFromZero)
+                : (decimal?)null;
 
             result.Add(new AreaCasualDto(
-                casual.Id, account?.EmployeeId, $"{casual.FirstName} {casual.LastName}", casual.City, casual.Phone,
-                casual.CurrentZoneId.Value, currentZone.Name, casual.RatingAverage,
-                casual.Skills.Select(x => x.Skill?.Name ?? string.Empty).Where(x => x.Length > 0).ToList(),
-                available, activeRequestExists, casual.BaseHourlyRate, rate, paidHours, estimated));
+                casual.Id,
+                account?.EmployeeId,
+                $"{casual.FirstName} {casual.LastName}",
+                currentZone.City,
+                casual.Phone,
+                casual.CurrentZoneId.Value,
+                currentZone.Name,
+                casual.RatingAverage,
+                casual.Skills
+                    .Select(x => x.Skill?.Name ?? string.Empty)
+                    .Where(x => x.Length > 0)
+                    .ToList(),
+                available,
+                activeRequestExists,
+                casual.BaseHourlyRate,
+                rate,
+                paidHours,
+                estimated));
         }
 
-        return result.OrderByDescending(x => x.IsAvailable).ThenByDescending(x => x.Rating).ThenBy(x => x.Name).ToList();
+        return result
+            .OrderByDescending(x => x.IsAvailable)
+            .ThenByDescending(x => x.Rating)
+            .ThenBy(x => x.Name)
+            .ToList();
     }
 
     public async Task<IReadOnlyList<AreaTransferCandidateDto>> GetTransferCandidatesAsync(Guid userId)
     {
         var (_, zone) = await Context(userId);
         var result = new List<AreaTransferCandidateDto>();
-        foreach (var casual in (await casuals.SearchAsync(zone.City, null))
-                     .Where(x => x.IsActive && x.RegistrationStatus == RegistrationStatus.Approved && x.CurrentZoneId == zone.Id))
+
+        var zoneCasuals = (await casuals.SearchAsync(null, null))
+            .Where(x =>
+                x.IsActive &&
+                x.RegistrationStatus == RegistrationStatus.Approved &&
+                x.CurrentZoneId.HasValue &&
+                x.CurrentZoneId.Value == zone.Id);
+
+        foreach (var casual in zoneCasuals)
         {
             var account = await users.GetByIdAsync(casual.UserId);
-            result.Add(new AreaTransferCandidateDto(casual.Id, account?.EmployeeId,
-                $"{casual.FirstName} {casual.LastName}", casual.City, zone.Id, zone.Name, casual.RatingAverage,
-                casual.Skills.Select(x => x.Skill?.Name ?? string.Empty).Where(x => x.Length > 0).ToList()));
+
+            result.Add(new AreaTransferCandidateDto(
+                casual.Id,
+                account?.EmployeeId,
+                $"{casual.FirstName} {casual.LastName}",
+                zone.City,
+                zone.Id,
+                zone.Name,
+                casual.RatingAverage,
+                casual.Skills
+                    .Select(x => x.Skill?.Name ?? string.Empty)
+                    .Where(x => x.Length > 0)
+                    .ToList()));
         }
-        return result.OrderBy(x => x.Name).ToList();
+
+        return result
+            .OrderBy(x => x.Name)
+            .ToList();
     }
 
     public async Task<IReadOnlyList<BookingDto>> GetBookingsAsync(Guid userId)
@@ -427,14 +519,20 @@ public class AreaManagerService(
         var casual = await casuals.GetByIdAsync(request.CasualProfileId) ?? throw new BusinessRuleException("Casual not found.");
         if (!casual.IsActive || casual.RegistrationStatus != RegistrationStatus.Approved || !await users.IsApprovedAndActiveAsync(casual.UserId))
             throw new BusinessRuleException("Casual is not active and approved.");
-        if (!string.Equals(store.City, zone.City, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(casual.City, zone.City, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(store.City, zone.City, StringComparison.OrdinalIgnoreCase))
             throw new BusinessRuleException($"Area Managers in {zone.City} cannot book Casuals into another city.");
-        if (casual.CurrentZoneId.HasValue)
+
+        if (!casual.CurrentZoneId.HasValue)
+            throw new BusinessRuleException("Casual does not have an assigned zone.");
+
+        var casualZone = await zones.GetByIdAsync(casual.CurrentZoneId.Value)
+            ?? throw new BusinessRuleException("Casual's current zone was not found.");
+
+        if (!casualZone.IsActive ||
+            !string.Equals(casualZone.City, zone.City, StringComparison.OrdinalIgnoreCase))
         {
-            var casualZone = await zones.GetByIdAsync(casual.CurrentZoneId.Value);
-            if (casualZone is null || !string.Equals(casualZone.City, zone.City, StringComparison.OrdinalIgnoreCase))
-                throw new BusinessRuleException($"Area Managers in {zone.City} cannot book Casuals from another city.");
+            throw new BusinessRuleException(
+                $"Area Managers in {zone.City} cannot book Casuals from another city.");
         }
 
         var paidHours = ServiceHelpers.PaidHours(request.StartDateTime, request.EndDateTime);
