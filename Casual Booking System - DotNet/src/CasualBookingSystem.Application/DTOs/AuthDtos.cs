@@ -20,7 +20,8 @@ public record RegisterAreaManagerRequest(
     string Password,
     string EmployeeId,
     string FirstName,
-    string LastName);
+    string LastName,
+    int ZoneId);
 
 public record RegisterStoreRequest(
     string Email,

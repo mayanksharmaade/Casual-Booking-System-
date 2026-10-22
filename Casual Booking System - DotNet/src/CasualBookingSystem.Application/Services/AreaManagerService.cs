@@ -20,26 +20,28 @@ public class AreaManagerService(
     INotificationRepository notifications,
     IAuditRepository audit) : IAreaManagerService
 {
-    private async Task<(UserAccountDto User, IReadOnlyList<int> ZoneIds)> Context(Guid userId)
+    private async Task<(UserAccountDto User, Zone Zone)> Context(Guid userId)
     {
         var user = await users.GetByIdAsync(userId) ?? throw new BusinessRuleException("User not found.");
         if (user.Role != UserRole.AreaManager) throw new BusinessRuleException("Area Manager access required.");
         if (!user.IsActive || user.ApprovalStatus != RegistrationStatus.Approved)
             throw new BusinessRuleException("Area Manager account is not active and approved.");
 
-        var assignments = await areaManagers.GetAssignmentsAsync(userId);
-        var zoneIds = assignments.Where(x => x.IsActive).Select(x => x.ZoneId).Distinct().ToArray();
+        var assignments = (await areaManagers.GetAssignmentsAsync(userId)).Where(x => x.IsActive).ToList();
+        if (assignments.Count == 0)
+            throw new BusinessRuleException("Area Manager has no assigned zone.");
+        if (assignments.Count > 1)
+            throw new BusinessRuleException("Area Manager configuration is invalid: only one zone is allowed.");
 
-        if (zoneIds.Length == 0)
-            throw new BusinessRuleException("Area Manager has no assigned zones.");
-
-        return (user, zoneIds);
+        var zone = assignments[0].Zone ?? await zones.GetByIdAsync(assignments[0].ZoneId)
+            ?? throw new BusinessRuleException("Assigned zone was not found.");
+        return (user, zone);
     }
 
     public async Task<AreaManagerDashboardDto> GetDashboardAsync(Guid userId, DateOnly date)
     {
-        var (_, zoneIds) = await Context(userId);
-        var assignedStores = await stores.GetByZoneIdsAsync(zoneIds);
+        var (_, zone) = await Context(userId);
+        var assignedStores = await stores.GetByZoneIdsAsync(new[] { zone.Id });
         var storeIds = assignedStores.Select(x => x.Id).ToArray();
 
         var dayStart = date.ToDateTime(TimeOnly.MinValue);
@@ -88,7 +90,7 @@ public class AreaManagerService(
 
         var availableCasuals = 0;
         foreach (var casual in (await casuals.SearchAsync(null, null))
-                     .Where(x => x.IsActive && x.RegistrationStatus == RegistrationStatus.Approved && x.CurrentZoneId.HasValue && zoneIds.Contains(x.CurrentZoneId.Value)))
+                     .Where(x => x.IsActive && x.RegistrationStatus == RegistrationStatus.Approved && x.CurrentZoneId.HasValue && x.CurrentZoneId.Value == zone.Id))
         {
             var availability = await casuals.GetAvailabilityAsync(casual.Id, dayStart, dayEnd);
             if (availability.Any(x => x.StartDateTime < dayEnd && x.EndDateTime > dayStart))
@@ -96,7 +98,9 @@ public class AreaManagerService(
         }
 
         return new AreaManagerDashboardDto(
-            zoneIds.Count,
+            zone.Id,
+            zone.Name,
+            zone.City,
             assignedStores.Count,
             staffingGaps,
             allBookings.Count(x => x.Status == BookingStatus.Pending),
@@ -108,8 +112,8 @@ public class AreaManagerService(
 
     public async Task<IReadOnlyList<AreaStoreSummaryDto>> GetStoresAsync(Guid userId, DateOnly date)
     {
-        var (_, zoneIds) = await Context(userId);
-        var assignedStores = await stores.GetByZoneIdsAsync(zoneIds);
+        var (_, zone) = await Context(userId);
+        var assignedStores = await stores.GetByZoneIdsAsync(new[] { zone.Id });
         var dayStart = date.ToDateTime(TimeOnly.MinValue);
         var dayEnd = dayStart.AddDays(1);
         var result = new List<AreaStoreSummaryDto>();
@@ -156,10 +160,10 @@ public class AreaManagerService(
 
     public async Task<IReadOnlyList<StaffingGapDto>> GetStaffingGapsAsync(Guid userId, DateTime from, DateTime to)
     {
-        var (_, zoneIds) = await Context(userId);
+        var (_, zone) = await Context(userId);
         if (to <= from) throw new BusinessRuleException("End must be after start.");
 
-        var assignedStores = await stores.GetByZoneIdsAsync(zoneIds);
+        var assignedStores = await stores.GetByZoneIdsAsync(new[] { zone.Id });
         var result = new List<StaffingGapDto>();
 
         foreach (var store in assignedStores)
@@ -198,23 +202,34 @@ public class AreaManagerService(
         DateTime start,
         DateTime end)
     {
-        var (_, zoneIds) = await Context(userId);
+        var (_, zone) = await Context(userId);
         ServiceHelpers.Hours(start, end);
 
         var allZones = (await zones.GetAllAsync()).ToDictionary(x => x.Id, x => x.Name);
         var result = new List<AreaCasualDto>();
 
-        foreach (var casual in (await casuals.SearchAsync(city, search))
+        foreach (var casual in (await casuals.SearchAsync(city, null))
                      .Where(x => x.IsActive &&
                                  x.RegistrationStatus == RegistrationStatus.Approved &&
                                  x.CurrentZoneId.HasValue &&
-                                 zoneIds.Contains(x.CurrentZoneId.Value)))
+                                 x.CurrentZoneId.Value == zone.Id))
         {
+            var account = await users.GetByIdAsync(casual.UserId);
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var q = search.Trim();
+                var matches = ($"{casual.FirstName} {casual.LastName}").Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                              casual.Phone.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                              (account?.EmployeeId?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false);
+                if (!matches) continue;
+            }
+
             var available = await casuals.IsAvailableAsync(casual.Id, start, end) &&
                             !await bookings.HasAcceptedOverlapAsync(casual.Id, start, end);
 
             result.Add(new AreaCasualDto(
                 casual.Id,
+                account?.EmployeeId,
                 $"{casual.FirstName} {casual.LastName}",
                 casual.City,
                 casual.CurrentZoneId!.Value,
@@ -229,8 +244,8 @@ public class AreaManagerService(
 
     public async Task<IReadOnlyList<BookingDto>> GetBookingsAsync(Guid userId)
     {
-        var (_, zoneIds) = await Context(userId);
-        var assignedStores = await stores.GetByZoneIdsAsync(zoneIds);
+        var (_, zone) = await Context(userId);
+        var assignedStores = await stores.GetByZoneIdsAsync(new[] { zone.Id });
         await bookings.ExpirePendingAsync(DateTime.UtcNow);
 
         return (await bookings.GetForStoresAsync(assignedStores.Select(x => x.Id).ToArray()))
@@ -240,19 +255,19 @@ public class AreaManagerService(
 
     public async Task<CasualTransferDto> TransferCasualAsync(Guid userId, TransferCasualRequest request)
     {
-        var (_, zoneIds) = await Context(userId);
+        var (_, zone) = await Context(userId);
 
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new BusinessRuleException("Transfer reason is required.");
-        if (!zoneIds.Contains(request.ToZoneId))
-            throw new BusinessRuleException("Destination zone is outside the Area Manager's assigned scope.");
+        if (request.ToZoneId == zone.Id)
+            throw new BusinessRuleException("Destination zone must be different from the Area Manager's zone.");
 
         var destination = await zones.GetByIdAsync(request.ToZoneId) ?? throw new BusinessRuleException("Destination zone not found.");
         if (!destination.IsActive) throw new BusinessRuleException("Destination zone is inactive.");
 
         var casual = await casuals.GetByIdAsync(request.CasualProfileId) ?? throw new BusinessRuleException("Casual not found.");
-        if (casual.CurrentZoneId.HasValue && !zoneIds.Contains(casual.CurrentZoneId.Value))
-            throw new BusinessRuleException("Casual's current zone is outside the Area Manager's assigned scope.");
+        if (casual.CurrentZoneId != zone.Id)
+            throw new BusinessRuleException("Area Manager can transfer only Casuals currently assigned to their own zone.");
         if (casual.CurrentZoneId == request.ToZoneId)
             throw new BusinessRuleException("Casual is already assigned to the destination zone.");
 
@@ -307,8 +322,8 @@ public class AreaManagerService(
 
     public async Task<IReadOnlyList<CasualTransferDto>> GetTransfersAsync(Guid userId)
     {
-        var (_, zoneIds) = await Context(userId);
-        return (await areaManagers.GetTransfersAsync(zoneIds))
+        var (_, zone) = await Context(userId);
+        return (await areaManagers.GetTransfersAsync(new[] { zone.Id }))
             .Select(x => new CasualTransferDto(
                 x.Id,
                 x.CasualProfileId,
@@ -324,13 +339,13 @@ public class AreaManagerService(
 
     public async Task CancelBookingAsync(Guid userId, int bookingId, string reason)
     {
-        var (_, zoneIds) = await Context(userId);
+        var (_, zone) = await Context(userId);
         if (string.IsNullOrWhiteSpace(reason)) throw new BusinessRuleException("Cancellation reason is required.");
 
         var booking = await bookings.GetByIdAsync(bookingId) ?? throw new BusinessRuleException("Booking not found.");
         var store = await stores.GetByIdAsync(booking.StoreId) ?? throw new BusinessRuleException("Store not found.");
 
-        if (!zoneIds.Contains(store.ZoneId))
+        if (store.ZoneId != zone.Id)
             throw new BusinessRuleException("Booking is outside the Area Manager's assigned scope.");
         if (booking.Status is BookingStatus.Cancelled or BookingStatus.Completed or BookingStatus.Expired)
             throw new BusinessRuleException("Booking cannot be cancelled in its current status.");
@@ -363,13 +378,13 @@ public class AreaManagerService(
 
     public async Task<BookingDto> CreateOverrideBookingAsync(Guid userId, AreaOverrideBookingRequest request)
     {
-        var (_, zoneIds) = await Context(userId);
+        var (_, zone) = await Context(userId);
 
         if (string.IsNullOrWhiteSpace(request.OverrideReason))
             throw new BusinessRuleException("Override reason is required.");
 
         var store = await stores.GetByIdAsync(request.StoreId) ?? throw new BusinessRuleException("Store not found.");
-        if (!zoneIds.Contains(store.ZoneId))
+        if (store.ZoneId != zone.Id)
             throw new BusinessRuleException("Store is outside the Area Manager's assigned scope.");
 
         var casual = await casuals.GetByIdAsync(request.CasualProfileId) ?? throw new BusinessRuleException("Casual not found.");
@@ -479,12 +494,36 @@ public class AreaManagerService(
         return ServiceHelpers.ToDto(booking);
     }
 
+
+    public async Task<IReadOnlyList<AreaWorkforceAbsenceDto>> GetWorkforceAbsencesAsync(Guid userId, DateTime from, DateTime to)
+    {
+        var (_, zone) = await Context(userId);
+        if (to <= from) throw new BusinessRuleException("End must be after start.");
+
+        var assignedStores = await stores.GetByZoneIdsAsync(new[] { zone.Id });
+        var result = new List<AreaWorkforceAbsenceDto>();
+        foreach (var store in assignedStores)
+        {
+            var absences = await employees.GetAbsencesAsync(store.Id, from, to);
+            foreach (var a in absences)
+            {
+                var employee = a.Employee;
+                if (employee is null) continue;
+                result.Add(new AreaWorkforceAbsenceDto(
+                    a.Id, store.Id, store.Code, store.Name, employee.Id, employee.EmployeeCode,
+                    $"{employee.FirstName} {employee.LastName}", employee.EmployeeType.ToString(),
+                    a.AbsenceType.ToString(), a.StartDateTime, a.EndDateTime, a.Reason));
+            }
+        }
+        return result.OrderBy(x => x.StartDateTime).ThenBy(x => x.StoreName).ToList();
+    }
+
     public async Task<AreaReportDto> GetReportAsync(Guid userId, DateTime from, DateTime to)
     {
-        var (_, zoneIds) = await Context(userId);
+        var (_, zone) = await Context(userId);
         if (to <= from) throw new BusinessRuleException("Report end must be after report start.");
 
-        var assignedStores = await stores.GetByZoneIdsAsync(zoneIds);
+        var assignedStores = await stores.GetByZoneIdsAsync(new[] { zone.Id });
         var storeIds = assignedStores.Select(x => x.Id).ToArray();
         var areaBookings = (await bookings.GetForStoresAsync(storeIds))
             .Where(x => x.StartDateTime < to && x.EndDateTime > from)

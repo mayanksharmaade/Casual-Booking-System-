@@ -7,7 +7,7 @@ public interface IZoneRepository
 {
     Task<IReadOnlyList<Zone>> GetAllAsync();
     Task<Zone?> GetByIdAsync(int id);
-    Task<bool> NameExistsAsync(string name);
+    Task<bool> NameExistsAsync(string name, string city);
     Task AddAsync(Zone zone);
     Task SaveChangesAsync();
 }

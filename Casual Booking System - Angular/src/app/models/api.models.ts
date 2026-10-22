@@ -57,6 +57,7 @@ export interface Registration {
 export interface Zone {
   id:number;
   name:string;
+  city:string;
   isActive:boolean;
 }
 
@@ -64,6 +65,7 @@ export interface PayRate {
   workerKind:string;
   workerId:number;
   workerName:string;
+  employeeId:string;
   workerType:string;
   storeName?:string|null;
   baseHourlyRate?:number|null;
@@ -113,10 +115,11 @@ export interface AdminStore {
 export interface AreaManagerAdmin {
   userId:string;
   email:string;
+  employeeId?:string|null;
   name:string;
   approvalStatus:number;
   isActive:boolean;
-  zones:Zone[];
+  zone?:Zone|null;
 }
 
 export interface SystemReport {
@@ -136,6 +139,7 @@ export interface SystemReport {
 
 export interface DailyLabourItem {
   workerName:string;
+  employeeId:string;
   workerType:string;
   scheduledHours:number;
   unpaidBreakHours:number;
@@ -246,6 +250,7 @@ export interface CasualSearch {
   skills:string[];
   isAvailable:boolean;
   isInStoreZone:boolean;
+  activeRequestExists:boolean;
   baseHourlyRate?:number|null;
   effectiveHourlyRate?:number|null;
   paidHours:number;
@@ -351,7 +356,9 @@ export interface CasualReport {
 }
 
 export interface AreaManagerDashboard {
-  assignedZones:number;
+  zoneId:number;
+  zoneName:string;
+  zoneCity:string;
   stores:number;
   staffingGaps:number;
   pendingBookings:number;
@@ -379,6 +386,7 @@ export interface AreaStoreSummary {
 
 export interface AreaCasual {
   casualProfileId:number;
+  employeeId?:string|null;
   name:string;
   city:string;
   currentZoneId:number;
@@ -386,6 +394,22 @@ export interface AreaCasual {
   rating:number;
   skills:string[];
   isAvailable:boolean;
+}
+
+
+export interface AreaWorkforceAbsence {
+  absenceId:number;
+  storeId:number;
+  storeCode:string;
+  storeName:string;
+  employeeId:number;
+  employeeCode:string;
+  employeeName:string;
+  employeeType:string;
+  absenceType:string;
+  startDateTime:string;
+  endDateTime:string;
+  reason?:string|null;
 }
 
 export interface CasualTransfer {

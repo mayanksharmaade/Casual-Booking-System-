@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, tap } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { AuthResponse, Role } from '../models/api.models';
+import { AuthResponse, Role, Zone } from '../models/api.models';
 
 @Injectable({providedIn:'root'})
 export class AuthService {
@@ -17,7 +17,7 @@ export class AuthService {
   registerCasual(payload:unknown){ return this.http.post(`${environment.apiUrl}/auth/register/casual`,payload); }
   registerStore(payload:unknown){ return this.http.post(`${environment.apiUrl}/auth/register/store`,payload); }
   registerAreaManager(payload:unknown){ return this.http.post(`${environment.apiUrl}/auth/register/area-manager`,payload); }
-  lookupZones(){ return this.http.get<{id:number,name:string,isActive:boolean}[]>(`${environment.apiUrl}/lookup/zones`); }
+  lookupZones(){ return this.http.get<Zone[]>(`${environment.apiUrl}/lookup/zones`); }
   lookupSkills(){ return this.http.get<{id:number,name:string}[]>(`${environment.apiUrl}/lookup/skills`); }
   token(){ return this.state()?.token ?? null; }
   logout(){ localStorage.removeItem(this.storageKey); this.state.set(null); this.router.navigate(['/login']); }

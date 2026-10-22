@@ -9,10 +9,10 @@ import { AreaManagerApiService } from '../../services/area-manager-api.service';
   imports:[CommonModule,FormsModule],
   template:`
     <h1>Area Casual Search</h1>
-    <p class="lead">Search available Casuals across the Area Manager's assigned zones.</p>
+    <p class="lead">Search available Casuals in the Area Manager's assigned zone.</p>
     <div class="panel form-grid">
       <input [(ngModel)]="city" placeholder="City">
-      <input [(ngModel)]="search" placeholder="Name / phone">
+      <input [(ngModel)]="search" placeholder="Employee ID / name / phone">
       <input type="datetime-local" [(ngModel)]="start">
       <input type="datetime-local" [(ngModel)]="end">
       <button (click)="run()">Search</button>
@@ -20,7 +20,7 @@ import { AreaManagerApiService } from '../../services/area-manager-api.service';
     <div class="cards">
       <div class="person" *ngFor="let c of rows">
         <div>
-          <strong>{{c.name}}</strong><span>Profile ID {{c.casualProfileId}}</span>
+          <strong>{{c.name}}</strong><span>Employee ID {{c.employeeId||'—'}} · Profile ID {{c.casualProfileId}}</span>
           <span>{{c.city}} · {{c.currentZoneName}}</span>
           <span>Rating {{c.rating|number:'1.1-1'}} · {{c.skills.join(', ')||'No skills listed'}}</span>
         </div>

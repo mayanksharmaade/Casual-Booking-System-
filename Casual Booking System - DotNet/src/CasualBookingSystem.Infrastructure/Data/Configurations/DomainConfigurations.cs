@@ -10,7 +10,8 @@ public class ZoneConfiguration : IEntityTypeConfiguration<Zone>
     public void Configure(EntityTypeBuilder<Zone> b)
     {
         b.Property(x => x.Name).HasMaxLength(100).IsRequired();
-        b.HasIndex(x => x.Name).IsUnique();
+        b.Property(x => x.City).HasMaxLength(100).IsRequired();
+        b.HasIndex(x => new { x.City, x.Name }).IsUnique();
     }
 }
 

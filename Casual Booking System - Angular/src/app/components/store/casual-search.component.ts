@@ -100,8 +100,8 @@ import { StoreApiService } from '../../services/store-api.service';
         </div>
 
         <div class="person-action">
-          <button type="button" [disabled]="!c.isAvailable || bookingId===c.casualProfileId" (click)="book(c)">
-            {{bookingId===c.casualProfileId ? 'Sending...' : 'Request booking'}}
+          <button type="button" [disabled]="!c.isAvailable || c.activeRequestExists || bookingId===c.casualProfileId" (click)="book(c)">
+            {{bookingId===c.casualProfileId ? 'Sending...' : (c.activeRequestExists ? 'Booking Requested' : 'Request booking')}}
           </button>
         </div>
       </div>
@@ -174,7 +174,7 @@ export class CasualSearchComponent implements OnInit {
       isEmergency:this.emergency
     }).pipe(finalize(()=>{this.bookingId=null;this.cdr.detectChanges();}))
       .subscribe({
-        next:()=>{this.message=`Booking request sent to ${c.name}. It will now appear on the Casual dashboard.`;this.cdr.detectChanges();},
+        next:()=>{c.activeRequestExists=true;c.isAvailable=false;this.message=`Booking request sent to ${c.name}.`;this.cdr.detectChanges();},
         error:e=>{this.error=e?.error?.message??e.message;this.cdr.detectChanges();}
       });
   }

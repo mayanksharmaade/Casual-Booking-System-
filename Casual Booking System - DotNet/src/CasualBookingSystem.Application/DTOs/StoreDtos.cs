@@ -177,6 +177,7 @@ public record CasualSearchDto(
     IReadOnlyList<string> Skills,
     bool IsAvailable,
     bool IsInStoreZone,
+    bool ActiveRequestExists,
     decimal? BaseHourlyRate,
     decimal? EffectiveHourlyRate,
     decimal PaidHours,

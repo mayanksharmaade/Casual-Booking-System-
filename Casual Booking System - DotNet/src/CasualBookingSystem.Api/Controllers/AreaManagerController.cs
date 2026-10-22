@@ -28,6 +28,10 @@ public class AreaManagerController(IAreaManagerService service) : ControllerBase
     [HttpGet("bookings")]
     public async Task<IActionResult> Bookings() => Ok(await service.GetBookingsAsync(User.UserId()));
 
+    [HttpGet("workforce/absences")]
+    public async Task<IActionResult> WorkforceAbsences(DateTime from, DateTime to) =>
+        Ok(await service.GetWorkforceAbsencesAsync(User.UserId(), from, to));
+
     [HttpPost("bookings/{bookingId:int}/cancel")]
     public async Task<IActionResult> CancelBooking(int bookingId, CancelBookingRequest request)
     {

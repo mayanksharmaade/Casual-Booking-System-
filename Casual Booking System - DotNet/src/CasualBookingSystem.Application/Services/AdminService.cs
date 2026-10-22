@@ -256,19 +256,20 @@ public class AdminService(
     }
 
     public async Task<IReadOnlyList<ZoneDto>> GetZonesAsync() =>
-        (await zones.GetAllAsync()).Select(x => new ZoneDto(x.Id, x.Name, x.IsActive)).ToList();
+        (await zones.GetAllAsync()).Select(x => new ZoneDto(x.Id, x.Name, x.City, x.IsActive)).ToList();
 
     public async Task<ZoneDto> CreateZoneAsync(Guid adminUserId, CreateZoneRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Name)) throw new BusinessRuleException("Zone name is required.");
-        if (await zones.NameExistsAsync(request.Name.Trim())) throw new BusinessRuleException("Zone already exists.");
+        if (string.IsNullOrWhiteSpace(request.City)) throw new BusinessRuleException("City is required.");
+        if (await zones.NameExistsAsync(request.Name.Trim(), request.City.Trim())) throw new BusinessRuleException("Zone already exists for this city.");
 
-        var zone = new Zone { Name = request.Name.Trim() };
+        var zone = new Zone { Name = request.Name.Trim(), City = request.City.Trim() };
         await zones.AddAsync(zone);
         await zones.SaveChangesAsync();
 
         await Log(adminUserId, "CreateZone", "Zone", zone.Id.ToString(), zone.Name);
-        return new ZoneDto(zone.Id, zone.Name, zone.IsActive);
+        return new ZoneDto(zone.Id, zone.Name, zone.City, zone.IsActive);
     }
 
     public async Task SetZoneActiveAsync(Guid adminUserId, int zoneId, bool isActive)
@@ -314,9 +315,12 @@ public class AdminService(
         if (changed) await employees.SaveChangesAsync();
     }
 
-    public async Task<IReadOnlyList<PayRateDto>> GetPayRatesAsync()
+    public async Task<PagedResultDto<PayRateDto>> GetPayRatesAsync(string? search, int page, int pageSize)
     {
         await EnsureManagerEmployeesAsync();
+        page = Math.Max(1, page);
+        pageSize = pageSize is 10 or 25 or 50 ? pageSize : 10;
+
         var allStores = await stores.GetAllAsync();
         var storeNames = allStores.ToDictionary(x => x.Id, x => x.Name);
         var result = new List<PayRateDto>();
@@ -327,7 +331,7 @@ public class AdminService(
             {
                 if (employee.EmployeeType is EmployeeType.Volunteer or EmployeeType.Casual) continue;
                 result.Add(new PayRateDto(
-                    "Employee", employee.Id, $"{employee.FirstName} {employee.LastName}", employee.EmployeeType.ToString(),
+                    "Employee", employee.Id, $"{employee.FirstName} {employee.LastName}", employee.EmployeeCode, employee.EmployeeType.ToString(),
                     storeNames.GetValueOrDefault(employee.StoreId), employee.BaseHourlyRate, 0m, BusinessRules.SaturdayLoadingPercent));
             }
         }
@@ -335,15 +339,27 @@ public class AdminService(
         foreach (var casual in await casuals.SearchAsync(null, null))
         {
             if (!casual.IsActive || casual.RegistrationStatus != RegistrationStatus.Approved) continue;
+            var account = await users.GetByIdAsync(casual.UserId);
             result.Add(new PayRateDto(
-                "Casual", casual.Id, $"{casual.FirstName} {casual.LastName}", "Casual",
+                "Casual", casual.Id, $"{casual.FirstName} {casual.LastName}", account?.EmployeeId ?? string.Empty, "Casual",
                 null, casual.BaseHourlyRate, BusinessRules.CasualLoadingPercent, BusinessRules.SaturdayLoadingPercent));
         }
 
-        return result
-            .OrderBy(x => x.WorkerType)
-            .ThenBy(x => x.WorkerName)
-            .ToList();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim();
+            result = result.Where(x =>
+                x.WorkerName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                x.EmployeeId.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                x.WorkerType.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                (x.StoreName?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)).ToList();
+        }
+
+        result = result.OrderBy(x => x.WorkerType).ThenBy(x => x.WorkerName).ToList();
+        var total = result.Count;
+        var items = result.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        var pages = total == 0 ? 0 : (int)Math.Ceiling(total / (double)pageSize);
+        return new PagedResultDto<PayRateDto>(items, page, pageSize, total, pages);
     }
 
     public async Task<PayRateDto> SetPayRateAsync(Guid adminUserId, SetPayRateRequest request)
@@ -364,7 +380,7 @@ public class AdminService(
             await employees.SaveChangesAsync();
             var store = await stores.GetByIdAsync(employee.StoreId);
             await Log(adminUserId, "SetIndividualPayRate", "Employee", employee.Id.ToString(), $"{employee.FirstName} {employee.LastName}: {request.BaseHourlyRate}");
-            return new PayRateDto("Employee", employee.Id, $"{employee.FirstName} {employee.LastName}", employee.EmployeeType.ToString(), store?.Name, employee.BaseHourlyRate, 0m, BusinessRules.SaturdayLoadingPercent);
+            return new PayRateDto("Employee", employee.Id, $"{employee.FirstName} {employee.LastName}", employee.EmployeeCode, employee.EmployeeType.ToString(), store?.Name, employee.BaseHourlyRate, 0m, BusinessRules.SaturdayLoadingPercent);
         }
 
         if (request.WorkerKind.Equals("Casual", StringComparison.OrdinalIgnoreCase))
@@ -374,7 +390,8 @@ public class AdminService(
             casual.BaseHourlyRate = request.BaseHourlyRate;
             await casuals.SaveChangesAsync();
             await Log(adminUserId, "SetIndividualPayRate", "CasualProfile", casual.Id.ToString(), $"{casual.FirstName} {casual.LastName}: {request.BaseHourlyRate}");
-            return new PayRateDto("Casual", casual.Id, $"{casual.FirstName} {casual.LastName}", "Casual", null, casual.BaseHourlyRate, BusinessRules.CasualLoadingPercent, BusinessRules.SaturdayLoadingPercent);
+            var account = await users.GetByIdAsync(casual.UserId);
+            return new PayRateDto("Casual", casual.Id, $"{casual.FirstName} {casual.LastName}", account?.EmployeeId ?? string.Empty, "Casual", null, casual.BaseHourlyRate, BusinessRules.CasualLoadingPercent, BusinessRules.SaturdayLoadingPercent);
         }
 
         throw new BusinessRuleException("Unknown worker kind.");
@@ -383,40 +400,33 @@ public class AdminService(
     public async Task<IReadOnlyList<AreaManagerAdminDto>> GetAreaManagersAsync()
     {
         var accounts = (await users.GetAllAsync()).Where(x => x.Role == UserRole.AreaManager).ToList();
-        var allZones = await zones.GetAllAsync();
         var result = new List<AreaManagerAdminDto>();
 
         foreach (var account in accounts)
         {
-            var assignments = await areaManagers.GetAssignmentsAsync(account.UserId);
-            var assignedIds = assignments.Where(x => x.IsActive).Select(x => x.ZoneId).ToHashSet();
-            var zoneDtos = allZones.Where(z => assignedIds.Contains(z.Id)).Select(z => new ZoneDto(z.Id, z.Name, z.IsActive)).ToList();
+            var assignment = (await areaManagers.GetAssignmentsAsync(account.UserId)).FirstOrDefault();
+            ZoneDto? zone = assignment?.Zone is null
+                ? null
+                : new ZoneDto(assignment.Zone.Id, assignment.Zone.Name, assignment.Zone.City, assignment.Zone.IsActive);
 
             result.Add(new AreaManagerAdminDto(
-                account.UserId,
-                account.Email,
-                $"{account.FirstName} {account.LastName}",
-                account.ApprovalStatus,
-                account.IsActive,
-                zoneDtos));
+                account.UserId, account.Email, account.EmployeeId,
+                $"{account.FirstName} {account.LastName}", account.ApprovalStatus, account.IsActive, zone));
         }
 
-        return result;
+        return result.OrderBy(x => x.Name).ToList();
     }
 
-    public async Task AssignAreaManagerZonesAsync(Guid adminUserId, Guid areaManagerUserId, AssignAreaManagerZonesRequest request)
+    public async Task AssignAreaManagerZoneAsync(Guid adminUserId, Guid areaManagerUserId, AssignAreaManagerZoneRequest request)
     {
         var account = await users.GetByIdAsync(areaManagerUserId) ?? throw new BusinessRuleException("Area Manager not found.");
         if (account.Role != UserRole.AreaManager) throw new BusinessRuleException("Selected user is not an Area Manager.");
-        if (request.ZoneIds.Count == 0) throw new BusinessRuleException("Select at least one zone.");
 
-        var allZones = await zones.GetAllAsync();
-        var activeIds = allZones.Where(x => x.IsActive).Select(x => x.Id).ToHashSet();
-        if (request.ZoneIds.Distinct().Any(id => !activeIds.Contains(id)))
-            throw new BusinessRuleException("One or more selected zones are invalid or inactive.");
+        var zone = await zones.GetByIdAsync(request.ZoneId) ?? throw new BusinessRuleException("Zone not found.");
+        if (!zone.IsActive) throw new BusinessRuleException("Selected zone is inactive.");
 
-        await areaManagers.SetAssignmentsAsync(areaManagerUserId, request.ZoneIds.Distinct().ToArray());
-        await Log(adminUserId, "AssignAreaManagerZones", "AreaManager", areaManagerUserId.ToString(), string.Join(",", request.ZoneIds.Distinct()));
+        await areaManagers.SetAssignmentsAsync(areaManagerUserId, new[] { request.ZoneId });
+        await Log(adminUserId, "AssignAreaManagerZone", "AreaManager", areaManagerUserId.ToString(), $"{zone.City} / {zone.Name}");
     }
 
     public async Task<IReadOnlyList<PublicHolidayDto>> GetPublicHolidaysAsync() =>

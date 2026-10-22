@@ -22,15 +22,15 @@ export class AdminApiService {
   reject(id:string){ return this.http.post<void>(`${this.base}/registrations/${id}/reject`,{}); }
 
   zones(){ return this.http.get<Zone[]>(`${this.base}/zones`); }
-  createZone(name:string){ return this.http.post<Zone>(`${this.base}/zones`,{name}); }
+  createZone(name:string,city:string){ return this.http.post<Zone>(`${this.base}/zones`,{name,city}); }
   setZoneActive(id:number,on:boolean){ return this.http.put<void>(`${this.base}/zones/${id}/active/${on}`,{}); }
 
-  payRates(){ return this.http.get<PayRate[]>(`${this.base}/pay-rates`); }
+  payRates(search="",page=1,pageSize=10){ return this.http.get<PagedResult<PayRate>>(`${this.base}/pay-rates`,{params:{search,page,pageSize}}); }
   setPayRate(payload:unknown){ return this.http.post<PayRate>(`${this.base}/pay-rates`,payload); }
 
   areaManagers(){ return this.http.get<AreaManagerAdmin[]>(`${this.base}/area-managers`); }
-  assignAreaManagerZones(userId:string,zoneIds:number[]){
-    return this.http.put<void>(`${this.base}/area-managers/${userId}/zones`,{zoneIds});
+  assignAreaManagerZone(userId:string,zoneId:number){
+    return this.http.put<void>(`${this.base}/area-managers/${userId}/zone`,{zoneId});
   }
 
   publicHolidays(){ return this.http.get<PublicHoliday[]>(`${this.base}/public-holidays`); }

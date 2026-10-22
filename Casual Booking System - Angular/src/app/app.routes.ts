@@ -41,6 +41,7 @@ export const routes:Routes=[
     {path:'area/casuals',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/casuals.component').then(m=>m.AreaCasualsComponent)},
     {path:'area/bookings',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/bookings.component').then(m=>m.AreaBookingsComponent)},
     {path:'area/transfers',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/transfers.component').then(m=>m.AreaTransfersComponent)},
+    {path:'area/workforce',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/workforce.component').then(m=>m.AreaWorkforceComponent)},
     {path:'area/reports',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/reports.component').then(m=>m.AreaReportsComponent)}
   ]},
 

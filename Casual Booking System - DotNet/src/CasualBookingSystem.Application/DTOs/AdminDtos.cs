@@ -14,13 +14,14 @@ public record AdminDashboardDto(
     int ActiveBookings,
     int StaffingAlerts);
 
-public record ZoneDto(int Id, string Name, bool IsActive);
-public record CreateZoneRequest(string Name);
+public record ZoneDto(int Id, string Name, string City, bool IsActive);
+public record CreateZoneRequest(string Name, string City);
 
 public record PayRateDto(
     string WorkerKind,
     int WorkerId,
     string WorkerName,
+    string EmployeeId,
     string WorkerType,
     string? StoreName,
     decimal? BaseHourlyRate,
@@ -48,8 +49,8 @@ public record RegistrationDto(
     string? StoreAddress);
 public record StoreAdminDto(int Id, string Code, string Name, string City, string ZoneName, RegistrationStatus RegistrationStatus, bool IsActive);
 
-public record AreaManagerAdminDto(Guid UserId, string Email, string Name, RegistrationStatus ApprovalStatus, bool IsActive, IReadOnlyList<ZoneDto> Zones);
-public record AssignAreaManagerZonesRequest(IReadOnlyList<int> ZoneIds);
+public record AreaManagerAdminDto(Guid UserId, string Email, string? EmployeeId, string Name, RegistrationStatus ApprovalStatus, bool IsActive, ZoneDto? Zone);
+public record AssignAreaManagerZoneRequest(int ZoneId);
 
 public record PublicHolidayDto(int Id, DateOnly HolidayDate, string Name, bool IsActive);
 public record CreatePublicHolidayRequest(DateOnly HolidayDate, string Name);

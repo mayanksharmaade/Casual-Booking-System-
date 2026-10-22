@@ -1,7 +1,9 @@
 namespace CasualBookingSystem.Application.DTOs;
 
 public record AreaManagerDashboardDto(
-    int AssignedZones,
+    int ZoneId,
+    string ZoneName,
+    string ZoneCity,
     int Stores,
     int StaffingGaps,
     int PendingBookings,
@@ -27,6 +29,7 @@ public record AreaStoreSummaryDto(
 
 public record AreaCasualDto(
     int CasualProfileId,
+    string? EmployeeId,
     string Name,
     string City,
     int CurrentZoneId,
@@ -34,6 +37,20 @@ public record AreaCasualDto(
     decimal Rating,
     IReadOnlyList<string> Skills,
     bool IsAvailable);
+
+public record AreaWorkforceAbsenceDto(
+    int AbsenceId,
+    int StoreId,
+    string StoreCode,
+    string StoreName,
+    int EmployeeId,
+    string EmployeeCode,
+    string EmployeeName,
+    string EmployeeType,
+    string AbsenceType,
+    DateTime StartDateTime,
+    DateTime EndDateTime,
+    string? Reason);
 
 public record TransferCasualRequest(int CasualProfileId, int ToZoneId, string Reason);
 public record CasualTransferDto(int Id, int CasualProfileId, string CasualName, int? FromZoneId, string? FromZoneName, int ToZoneId, string ToZoneName, string Reason, DateTime TransferredAtUtc);

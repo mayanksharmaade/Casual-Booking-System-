@@ -10,7 +10,8 @@ public class AuthService(
     IUserAccountService users,
     ICasualRepository casuals,
     IStoreRepository stores,
-    IZoneRepository zones) : IAuthService
+    IZoneRepository zones,
+    IAreaManagerRepository areaManagers) : IAuthService
 {
     public Task<AuthResponse?> LoginAsync(LoginRequest request) =>
         users.LoginAsync(request.Email, request.Password);
@@ -22,6 +23,9 @@ public class AuthService(
 
         if (!zone.IsActive)
             throw new BusinessRuleException("Selected zone is not active.");
+
+        if (!string.Equals(zone.City.Trim(), request.City.Trim(), StringComparison.OrdinalIgnoreCase))
+            throw new BusinessRuleException("Selected zone does not belong to the entered city.");
 
         if (string.IsNullOrWhiteSpace(request.EmployeeId))
             throw new BusinessRuleException("Employee ID is required.");
@@ -55,7 +59,12 @@ public class AuthService(
         if (string.IsNullOrWhiteSpace(request.EmployeeId))
             throw new BusinessRuleException("Employee ID is required.");
 
-        await users.CreateUserAsync(
+        var zone = await zones.GetByIdAsync(request.ZoneId)
+            ?? throw new BusinessRuleException("Selected zone does not exist.");
+        if (!zone.IsActive)
+            throw new BusinessRuleException("Selected zone is not active.");
+
+        var userId = await users.CreateUserAsync(
             request.Email,
             request.Password,
             request.FirstName,
@@ -63,6 +72,10 @@ public class AuthService(
             UserRole.AreaManager,
             RegistrationStatus.Pending,
             employeeId: request.EmployeeId.Trim());
+
+        // One Area Manager = one Zone. The assignment is created at registration
+        // and becomes usable once Super Admin approves the account.
+        await areaManagers.SetAssignmentsAsync(userId, new[] { request.ZoneId });
     }
 
     public async Task RegisterStoreAsync(RegisterStoreRequest request)
@@ -75,6 +88,9 @@ public class AuthService(
 
         if (!zone.IsActive)
             throw new BusinessRuleException("Selected zone is not active.");
+
+        if (!string.Equals(zone.City.Trim(), request.City.Trim(), StringComparison.OrdinalIgnoreCase))
+            throw new BusinessRuleException("Selected zone does not belong to the entered city.");
 
         var store = new Store
         {

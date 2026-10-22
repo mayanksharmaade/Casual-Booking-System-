@@ -25,11 +25,11 @@ public interface IAdminService
     Task<ZoneDto> CreateZoneAsync(Guid adminUserId, CreateZoneRequest request);
     Task SetZoneActiveAsync(Guid adminUserId, int zoneId, bool isActive);
 
-    Task<IReadOnlyList<PayRateDto>> GetPayRatesAsync();
+    Task<PagedResultDto<PayRateDto>> GetPayRatesAsync(string? search, int page, int pageSize);
     Task<PayRateDto> SetPayRateAsync(Guid adminUserId, SetPayRateRequest request);
 
     Task<IReadOnlyList<AreaManagerAdminDto>> GetAreaManagersAsync();
-    Task AssignAreaManagerZonesAsync(Guid adminUserId, Guid areaManagerUserId, AssignAreaManagerZonesRequest request);
+    Task AssignAreaManagerZoneAsync(Guid adminUserId, Guid areaManagerUserId, AssignAreaManagerZoneRequest request);
 
     Task<IReadOnlyList<PublicHolidayDto>> GetPublicHolidaysAsync();
     Task<PublicHolidayDto> CreatePublicHolidayAsync(Guid adminUserId, CreatePublicHolidayRequest request);
@@ -82,6 +82,7 @@ public interface ICasualService
     Task DeleteAvailabilityAsync(Guid userId, int availabilityId);
 
     Task<IReadOnlyList<BookingDto>> GetBookingsAsync(Guid userId);
+    
     Task AcceptBookingAsync(Guid userId, int bookingId);
     Task DeclineBookingAsync(Guid userId, int bookingId, DeclineBookingRequest request);
     Task CancelBookingAsync(Guid userId, int bookingId, CancelBookingRequest request);
@@ -99,6 +100,7 @@ public interface IAreaManagerService
     Task<IReadOnlyList<StaffingGapDto>> GetStaffingGapsAsync(Guid userId, DateTime from, DateTime to);
     Task<IReadOnlyList<AreaCasualDto>> SearchCasualsAsync(Guid userId, string? city, string? search, DateTime start, DateTime end);
     Task<IReadOnlyList<BookingDto>> GetBookingsAsync(Guid userId);
+    Task<IReadOnlyList<AreaWorkforceAbsenceDto>> GetWorkforceAbsencesAsync(Guid userId, DateTime from, DateTime to);
 
     Task<CasualTransferDto> TransferCasualAsync(Guid userId, TransferCasualRequest request);
     Task<IReadOnlyList<CasualTransferDto>> GetTransfersAsync(Guid userId);

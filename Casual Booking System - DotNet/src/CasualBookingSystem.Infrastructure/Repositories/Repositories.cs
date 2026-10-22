@@ -14,8 +14,8 @@ public class ZoneRepository(ApplicationDbContext db) : IZoneRepository
     public Task<Zone?> GetByIdAsync(int id) =>
         db.Zones.FirstOrDefaultAsync(x => x.Id == id);
 
-    public Task<bool> NameExistsAsync(string name) =>
-        db.Zones.AnyAsync(x => x.Name == name);
+    public Task<bool> NameExistsAsync(string name, string city) =>
+        db.Zones.AnyAsync(x => x.Name == name && x.City == city);
 
     public Task AddAsync(Zone zone) =>
         db.Zones.AddAsync(zone).AsTask();

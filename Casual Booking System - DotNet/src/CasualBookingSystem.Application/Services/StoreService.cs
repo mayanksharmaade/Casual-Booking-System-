@@ -895,7 +895,7 @@ public class StoreService(
         var zoneDtos = (await zones.GetAllAsync())
             .Where(x => x.IsActive)
             .OrderBy(x => x.Name)
-            .Select(x => new ZoneDto(x.Id, x.Name, x.IsActive))
+            .Select(x => new ZoneDto(x.Id, x.Name, x.City, x.IsActive))
             .ToList();
 
         var skillDtos = (await skills.GetAllAsync())
@@ -931,7 +931,9 @@ public class StoreService(
         foreach (var casual in candidates)
         {
             var inZone = casual.CurrentZoneId == store.ZoneId;
+            var activeRequestExists = await bookings.HasDuplicateActiveRequestAsync(store.Id, casual.Id, start, end);
             var available = inZone &&
+                            !activeRequestExists &&
                             await casuals.IsAvailableAsync(casual.Id, start, end) &&
                             !await bookings.HasAcceptedOverlapAsync(casual.Id, start, end);
 
@@ -946,6 +948,7 @@ public class StoreService(
                 casual.Skills.Select(s => s.Skill?.Name ?? string.Empty).Where(x => x.Length > 0).OrderBy(x => x).ToList(),
                 available,
                 inZone,
+                activeRequestExists,
                 casual.BaseHourlyRate,
                 casual.BaseHourlyRate.HasValue ? ServiceHelpers.EffectiveHourlyRate(casual.BaseHourlyRate.Value, EmployeeType.Casual, start) : null,
                 paidHours,

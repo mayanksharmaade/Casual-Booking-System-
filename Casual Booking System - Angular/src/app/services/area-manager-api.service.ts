@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import {
   AreaCasual, AreaManagerDashboard, AreaReport, AreaStoreSummary, Booking,
-  CasualTransfer, StaffingGap
+  CasualTransfer, StaffingGap, AreaWorkforceAbsence
 } from '../models/api.models';
 
 @Injectable({providedIn:'root'})
@@ -30,6 +30,10 @@ export class AreaManagerApiService {
   }
 
   bookings(){ return this.http.get<Booking[]>(`${this.base}/bookings`); }
+
+  workforceAbsences(from:string,to:string){
+    return this.http.get<AreaWorkforceAbsence[]>(`${this.base}/workforce/absences`,{params:{from,to}});
+  }
 
   cancelBooking(id:number,reason:string){
     return this.http.post<void>(`${this.base}/bookings/${id}/cancel`,{reason});

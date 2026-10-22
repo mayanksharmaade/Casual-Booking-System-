@@ -67,7 +67,8 @@ public class AdminController(IAdminService service) : ControllerBase
     }
 
     [HttpGet("pay-rates")]
-    public async Task<IActionResult> PayRates() => Ok(await service.GetPayRatesAsync());
+    public async Task<IActionResult> PayRates([FromQuery] string? search = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 10) =>
+        Ok(await service.GetPayRatesAsync(search, page, pageSize));
 
     [HttpPost("pay-rates")]
     public async Task<IActionResult> SetPayRate(SetPayRateRequest request) =>
@@ -76,10 +77,10 @@ public class AdminController(IAdminService service) : ControllerBase
     [HttpGet("area-managers")]
     public async Task<IActionResult> AreaManagers() => Ok(await service.GetAreaManagersAsync());
 
-    [HttpPut("area-managers/{userId:guid}/zones")]
-    public async Task<IActionResult> AssignAreaManagerZones(Guid userId, AssignAreaManagerZonesRequest request)
+    [HttpPut("area-managers/{userId:guid}/zone")]
+    public async Task<IActionResult> AssignAreaManagerZone(Guid userId, AssignAreaManagerZoneRequest request)
     {
-        await service.AssignAreaManagerZonesAsync(User.UserId(), userId, request);
+        await service.AssignAreaManagerZoneAsync(User.UserId(), userId, request);
         return NoContent();
     }
 

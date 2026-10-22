@@ -4,94 +4,10 @@ import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { PayRate } from '../../models/api.models';
 import { AdminApiService } from '../../services/admin-api.service';
-
-@Component({
-  standalone:true,
-  imports:[CommonModule,FormsModule],
-  template:`
-    <h1>Individual Pay Rates</h1>
-    <p class="lead">Super Admin sets each paid worker's base hourly rate. Casual loading (25%) and Saturday loading (25%) are automatic.</p>
-
-    <div class="callout warn">
-      Volunteers are unpaid. Store users cannot edit pay rates. Saturday and Casual loadings are calculated when a shift is costed.
-    </div>
-
-    <div class="panel">
-      <table>
-        <thead><tr><th>Worker</th><th>Type</th><th>Store</th><th>Base Rate</th><th>Automatic Loadings</th><th>Update</th></tr></thead>
-        <tbody>
-          <tr *ngFor="let x of rows; trackBy:trackRow">
-            <td><strong>{{x.workerName}}</strong></td>
-            <td>{{typeLabel(x.workerType)}}</td>
-            <td>{{x.storeName||'—'}}</td>
-            <td>{{x.baseHourlyRate==null?'Not set':(x.baseHourlyRate|currency:'AUD':'symbol':'1.2-2')}}</td>
-            <td>
-              <span *ngIf="x.casualLoadingPercent">Casual +{{x.casualLoadingPercent}}%</span>
-              <span *ngIf="x.casualLoadingPercent && x.saturdayLoadingPercent"> · </span>
-              <span>Saturday +{{x.saturdayLoadingPercent}}%</span>
-            </td>
-            <td class="rate-edit">
-              <input type="number" min="0.01" step="0.01" [(ngModel)]="drafts[key(x)]" placeholder="Base rate">
-              <button type="button" (click)="save(x)" [disabled]="savingKey===key(x)">
-                {{savingKey===key(x)?'Saving...':'Save'}}
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="empty" *ngIf="!loading && !rows.length">No paid workers found.</div>
-    </div>
-
-    <div class="callout good" *ngIf="message">{{message}}</div>
-    <div class="callout error-box" *ngIf="error">{{error}}</div>
-  `,
-  styleUrls:['../page.scss'],
-  styles:[`.rate-edit{display:flex;gap:8px;align-items:center}.rate-edit input{max-width:130px}`]
-})
-export class PayRatesComponent implements OnInit {
-  rows:PayRate[]=[];
-  drafts:Record<string,number|null>={};
-  loading=false;
-  savingKey='';
-  message='';
-  error='';
-
-  constructor(private api:AdminApiService,private cdr:ChangeDetectorRef){}
-  ngOnInit(){this.load();}
-
-  key(x:PayRate){return `${x.workerKind}-${x.workerId}`;}
-  trackRow=(_:number,x:PayRate)=>this.key(x);
-  typeLabel(value:string){return value.replace('PartTime','Part-Time').replace('FullTime','Full-Time').replace('StoreManager','Store Manager').replace('AssistantManager','Assistant Manager');}
-
-  load(){
-    this.loading=true; this.error='';
-    this.api.payRates().pipe(finalize(()=>{this.loading=false;this.cdr.detectChanges();})).subscribe({
-      next:rows=>{
-        this.rows=rows;
-        const next:Record<string,number|null>={};
-        for(const x of rows) next[this.key(x)]=x.baseHourlyRate??null;
-        this.drafts=next;
-        this.cdr.detectChanges();
-      },
-      error:e=>{this.error=e?.error?.message??'Unable to load pay rates.';this.cdr.detectChanges();}
-    });
-  }
-
-  save(x:PayRate){
-    const k=this.key(x);
-    const rate=Number(this.drafts[k]);
-    if(!rate || rate<=0 || this.savingKey)return;
-    this.savingKey=k; this.message=''; this.error='';
-    this.api.setPayRate({workerKind:x.workerKind,workerId:x.workerId,baseHourlyRate:rate})
-      .pipe(finalize(()=>{this.savingKey='';this.cdr.detectChanges();}))
-      .subscribe({
-        next:updated=>{
-          this.rows=this.rows.map(r=>this.key(r)===k?updated:r);
-          this.drafts[k]=updated.baseHourlyRate??rate;
-          this.message=`Pay rate updated for ${updated.workerName}.`;
-          this.cdr.detectChanges();
-        },
-        error:e=>{this.error=e?.error?.message??'Unable to update pay rate.';this.cdr.detectChanges();}
-      });
-  }
-}
+@Component({standalone:true,imports:[CommonModule,FormsModule],template:`
+<h1>Individual Pay Rates</h1><p class="lead">Search by Employee ID, name, worker type or store. Results are paged.</p>
+<div class="panel form-row"><input [(ngModel)]="search" (keyup.enter)="goFirst()" placeholder="Employee ID / name / store"><select [(ngModel)]="pageSize" (change)="goFirst()"><option [ngValue]="10">10</option><option [ngValue]="25">25</option><option [ngValue]="50">50</option></select><button (click)="goFirst()">Search</button></div>
+<div class="panel"><table><thead><tr><th>Employee ID</th><th>Worker</th><th>Type</th><th>Store</th><th>Base Rate</th><th>Automatic Loadings</th><th>Update</th></tr></thead><tbody><tr *ngFor="let x of rows"><td>{{x.employeeId||'—'}}</td><td><strong>{{x.workerName}}</strong></td><td>{{typeLabel(x.workerType)}}</td><td>{{x.storeName||'—'}}</td><td>{{x.baseHourlyRate==null?'Not set':(x.baseHourlyRate|currency:'AUD')}}</td><td><span *ngIf="x.casualLoadingPercent">Casual +{{x.casualLoadingPercent}}% · </span>Saturday +{{x.saturdayLoadingPercent}}%</td><td class="rate-edit"><input type="number" min="0.01" step="0.01" [(ngModel)]="drafts[key(x)]"><button (click)="save(x)" [disabled]="savingKey===key(x)">{{savingKey===key(x)?'Saving...':'Save'}}</button></td></tr></tbody></table><div class="empty" *ngIf="!loading&&!rows.length">No paid workers found.</div>
+<div class="form-row" *ngIf="totalCount"><span>Page {{page}} of {{totalPages||1}} · {{totalCount}} records</span><button (click)="prev()" [disabled]="page<=1">Previous</button><button (click)="next()" [disabled]="page>=totalPages">Next</button></div></div>
+<div class="callout good" *ngIf="message">{{message}}</div><div class="callout error-box" *ngIf="error">{{error}}</div>`,styleUrls:['../page.scss'],styles:[`.rate-edit{display:flex;gap:8px;align-items:center}.rate-edit input{max-width:130px}`]})
+export class PayRatesComponent implements OnInit {rows:PayRate[]=[];drafts:Record<string,number|null>={};loading=false;savingKey='';message='';error='';search='';page=1;pageSize=10;totalCount=0;totalPages=0;constructor(private api:AdminApiService,private cdr:ChangeDetectorRef){}ngOnInit(){this.load();}key(x:PayRate){return `${x.workerKind}-${x.workerId}`;}typeLabel(v:string){return v.replace('PartTime','Part-Time').replace('FullTime','Full-Time').replace('StoreManager','Store Manager').replace('AssistantManager','Assistant Manager');}goFirst(){this.page=1;this.load();}prev(){if(this.page>1){this.page--;this.load();}}next(){if(this.page<this.totalPages){this.page++;this.load();}}load(){this.loading=true;this.error='';this.api.payRates(this.search,this.page,this.pageSize).pipe(finalize(()=>{this.loading=false;this.cdr.detectChanges();})).subscribe({next:r=>{this.rows=r.items;this.page=r.page;this.totalCount=r.totalCount;this.totalPages=r.totalPages;const d:Record<string,number|null>={};for(const x of r.items)d[this.key(x)]=x.baseHourlyRate??null;this.drafts=d;this.cdr.detectChanges();},error:e=>{this.error=e?.error?.message??'Unable to load pay rates.';this.cdr.detectChanges();}});}save(x:PayRate){const k=this.key(x),rate=Number(this.drafts[k]);if(!rate||rate<=0||this.savingKey)return;this.savingKey=k;this.message='';this.api.setPayRate({workerKind:x.workerKind,workerId:x.workerId,baseHourlyRate:rate}).pipe(finalize(()=>{this.savingKey='';this.cdr.detectChanges();})).subscribe({next:u=>{this.message=`Pay rate updated for ${u.workerName}.`;this.load();},error:e=>{this.error=e?.error?.message??'Unable to update pay rate.';this.cdr.detectChanges();}});}}
