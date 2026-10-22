@@ -41,9 +41,7 @@ export class ShellComponent {
     if(role==='AreaManager') return [
       ['Dashboard','/area/dashboard'],
       ['Stores','/area/stores'],
-      ['Staffing Gaps','/area/gaps'],
       ['Casuals','/area/casuals'],
-      ['Bookings','/area/bookings'],
       ['Transfers','/area/transfers'],
       ['Reports','/area/reports']
     ];

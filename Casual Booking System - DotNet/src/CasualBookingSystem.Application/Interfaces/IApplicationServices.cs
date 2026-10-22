@@ -95,10 +95,12 @@ public interface ICasualService
 
 public interface IAreaManagerService
 {
-    Task<AreaManagerDashboardDto> GetDashboardAsync(Guid userId, DateOnly date);
-    Task<IReadOnlyList<AreaStoreSummaryDto>> GetStoresAsync(Guid userId, DateOnly date);
+    Task<AreaManagerDashboardDto> GetDashboardAsync(Guid userId, DateOnly date, string period);
+    Task<IReadOnlyList<AreaStoreSummaryDto>> GetStoresAsync(Guid userId, DateOnly date, string period);
     Task<IReadOnlyList<StaffingGapDto>> GetStaffingGapsAsync(Guid userId, DateTime from, DateTime to);
-    Task<IReadOnlyList<AreaCasualDto>> SearchCasualsAsync(Guid userId, string? city, string? search, DateTime start, DateTime end);
+    Task<AreaCasualSearchFiltersDto> GetCasualSearchFiltersAsync(Guid userId);
+    Task<IReadOnlyList<AreaCasualDto>> SearchCasualsAsync(Guid userId, string? city, string? search, DateTime start, DateTime end, int? zoneId = null, IReadOnlyList<int>? skillIds = null);
+    Task<IReadOnlyList<AreaTransferCandidateDto>> GetTransferCandidatesAsync(Guid userId);
     Task<IReadOnlyList<BookingDto>> GetBookingsAsync(Guid userId);
     Task<IReadOnlyList<AreaWorkforceAbsenceDto>> GetWorkforceAbsencesAsync(Guid userId, DateTime from, DateTime to);
 

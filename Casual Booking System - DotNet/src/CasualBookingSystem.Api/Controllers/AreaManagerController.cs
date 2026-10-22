@@ -10,20 +10,28 @@ namespace CasualBookingSystem.Api.Controllers;
 public class AreaManagerController(IAreaManagerService service) : ControllerBase
 {
     [HttpGet("dashboard")]
-    public async Task<IActionResult> Dashboard([FromQuery] DateOnly? date) =>
-        Ok(await service.GetDashboardAsync(User.UserId(), date ?? DateOnly.FromDateTime(DateTime.Today)));
+    public async Task<IActionResult> Dashboard([FromQuery] DateOnly? date, [FromQuery] string period = "day") =>
+        Ok(await service.GetDashboardAsync(User.UserId(), date ?? DateOnly.FromDateTime(DateTime.Today), period));
 
     [HttpGet("stores")]
-    public async Task<IActionResult> Stores([FromQuery] DateOnly? date) =>
-        Ok(await service.GetStoresAsync(User.UserId(), date ?? DateOnly.FromDateTime(DateTime.Today)));
+    public async Task<IActionResult> Stores([FromQuery] DateOnly? date, [FromQuery] string period = "day") =>
+        Ok(await service.GetStoresAsync(User.UserId(), date ?? DateOnly.FromDateTime(DateTime.Today), period));
 
     [HttpGet("staffing-gaps")]
     public async Task<IActionResult> StaffingGaps(DateTime from, DateTime to) =>
         Ok(await service.GetStaffingGapsAsync(User.UserId(), from, to));
 
+    [HttpGet("casuals/filters")]
+    public async Task<IActionResult> CasualFilters() =>
+        Ok(await service.GetCasualSearchFiltersAsync(User.UserId()));
+
     [HttpGet("casuals/search")]
-    public async Task<IActionResult> SearchCasuals(string? city, string? search, DateTime start, DateTime end) =>
-        Ok(await service.SearchCasualsAsync(User.UserId(), city, search, start, end));
+    public async Task<IActionResult> SearchCasuals(string? city, string? search, DateTime start, DateTime end, int? zoneId = null, [FromQuery] int[]? skillIds = null) =>
+        Ok(await service.SearchCasualsAsync(User.UserId(), city, search, start, end, zoneId, skillIds));
+
+    [HttpGet("casuals/transfer-candidates")]
+    public async Task<IActionResult> TransferCandidates() =>
+        Ok(await service.GetTransferCandidatesAsync(User.UserId()));
 
     [HttpGet("bookings")]
     public async Task<IActionResult> Bookings() => Ok(await service.GetBookingsAsync(User.UserId()));

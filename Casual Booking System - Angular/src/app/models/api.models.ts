@@ -359,6 +359,8 @@ export interface AreaManagerDashboard {
   zoneId:number;
   zoneName:string;
   zoneCity:string;
+  periodFrom:string;
+  periodTo:string;
   stores:number;
   staffingGaps:number;
   pendingBookings:number;
@@ -389,11 +391,43 @@ export interface AreaCasual {
   employeeId?:string|null;
   name:string;
   city:string;
+  phone:string;
   currentZoneId:number;
   currentZoneName:string;
   rating:number;
   skills:string[];
   isAvailable:boolean;
+  activeRequestExists:boolean;
+  baseHourlyRate?:number|null;
+  effectiveHourlyRate?:number|null;
+  paidHours:number;
+  estimatedCost?:number|null;
+}
+
+export interface AreaStoreOption {
+  storeId:number;
+  storeCode:string;
+  storeName:string;
+}
+
+export interface AreaCasualSearchFilters {
+  city:string;
+  managedZoneId:number;
+  managedZoneName:string;
+  zones:Zone[];
+  stores:AreaStoreOption[];
+  skills:{id:number;name:string}[];
+}
+
+export interface AreaTransferCandidate {
+  casualProfileId:number;
+  employeeId?:string|null;
+  name:string;
+  city:string;
+  currentZoneId:number;
+  currentZoneName:string;
+  rating:number;
+  skills:string[];
 }
 
 

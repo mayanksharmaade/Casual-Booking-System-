@@ -37,9 +37,7 @@ export const routes:Routes=[
 
     {path:'area/dashboard',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/dashboard.component').then(m=>m.AreaDashboardComponent)},
     {path:'area/stores',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/stores.component').then(m=>m.AreaStoresComponent)},
-    {path:'area/gaps',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/gaps.component').then(m=>m.AreaGapsComponent)},
     {path:'area/casuals',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/casuals.component').then(m=>m.AreaCasualsComponent)},
-    {path:'area/bookings',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/bookings.component').then(m=>m.AreaBookingsComponent)},
     {path:'area/transfers',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/transfers.component').then(m=>m.AreaTransfersComponent)},
     {path:'area/workforce',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/workforce.component').then(m=>m.AreaWorkforceComponent)},
     {path:'area/reports',canActivate:[roleGuard],data:{roles:['AreaManager']},loadComponent:()=>import('./components/area/reports.component').then(m=>m.AreaReportsComponent)}

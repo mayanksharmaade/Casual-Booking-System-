@@ -1,9 +1,9 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import {
-  AreaCasual, AreaManagerDashboard, AreaReport, AreaStoreSummary, Booking,
-  CasualTransfer, StaffingGap, AreaWorkforceAbsence
+  AreaCasual, AreaCasualSearchFilters, AreaManagerDashboard, AreaReport, AreaStoreSummary,
+  AreaTransferCandidate, Booking, CasualTransfer, AreaWorkforceAbsence
 } from '../models/api.models';
 
 @Injectable({providedIn:'root'})
@@ -11,32 +11,27 @@ export class AreaManagerApiService {
   private base=`${environment.apiUrl}/area-manager`;
   constructor(private http:HttpClient){}
 
-  dashboard(date?:string){
-    const params=date?{date}:undefined;
-    return this.http.get<AreaManagerDashboard>(`${this.base}/dashboard`,{params});
+  dashboard(date:string,period:'day'|'week'='day'){
+    return this.http.get<AreaManagerDashboard>(`${this.base}/dashboard`,{params:{date,period}});
   }
 
-  stores(date?:string){
-    const params=date?{date}:undefined;
-    return this.http.get<AreaStoreSummary[]>(`${this.base}/stores`,{params});
+  stores(date:string,period:'day'|'week'|'month'='day'){
+    return this.http.get<AreaStoreSummary[]>(`${this.base}/stores`,{params:{date,period}});
   }
 
-  gaps(from:string,to:string){
-    return this.http.get<StaffingGap[]>(`${this.base}/staffing-gaps`,{params:{from,to}});
+  casualFilters(){ return this.http.get<AreaCasualSearchFilters>(`${this.base}/casuals/filters`); }
+
+  searchCasuals(city:string,search:string,start:string,end:string,zoneId:number|null,skillIds:number[]){
+    let params=new HttpParams().set('city',city).set('search',search).set('start',start).set('end',end);
+    if(zoneId!=null) params=params.set('zoneId',zoneId);
+    for(const id of skillIds) params=params.append('skillIds',id);
+    return this.http.get<AreaCasual[]>(`${this.base}/casuals/search`,{params});
   }
 
-  searchCasuals(city:string,search:string,start:string,end:string){
-    return this.http.get<AreaCasual[]>(`${this.base}/casuals/search`,{params:{city,search,start,end}});
-  }
-
-  bookings(){ return this.http.get<Booking[]>(`${this.base}/bookings`); }
+  transferCandidates(){ return this.http.get<AreaTransferCandidate[]>(`${this.base}/casuals/transfer-candidates`); }
 
   workforceAbsences(from:string,to:string){
     return this.http.get<AreaWorkforceAbsence[]>(`${this.base}/workforce/absences`,{params:{from,to}});
-  }
-
-  cancelBooking(id:number,reason:string){
-    return this.http.post<void>(`${this.base}/bookings/${id}/cancel`,{reason});
   }
 
   createOverrideBooking(payload:unknown){

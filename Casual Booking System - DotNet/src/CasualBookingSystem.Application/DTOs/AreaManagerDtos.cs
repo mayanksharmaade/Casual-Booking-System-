@@ -4,6 +4,8 @@ public record AreaManagerDashboardDto(
     int ZoneId,
     string ZoneName,
     string ZoneCity,
+    DateOnly PeriodFrom,
+    DateOnly PeriodTo,
     int Stores,
     int StaffingGaps,
     int PendingBookings,
@@ -32,11 +34,36 @@ public record AreaCasualDto(
     string? EmployeeId,
     string Name,
     string City,
+    string Phone,
     int CurrentZoneId,
     string CurrentZoneName,
     decimal Rating,
     IReadOnlyList<string> Skills,
-    bool IsAvailable);
+    bool IsAvailable,
+    bool ActiveRequestExists,
+    decimal? BaseHourlyRate,
+    decimal? EffectiveHourlyRate,
+    decimal PaidHours,
+    decimal? EstimatedCost);
+
+public record AreaStoreOptionDto(int StoreId, string StoreCode, string StoreName);
+public record AreaCasualSearchFiltersDto(
+    string City,
+    int ManagedZoneId,
+    string ManagedZoneName,
+    IReadOnlyList<ZoneDto> Zones,
+    IReadOnlyList<AreaStoreOptionDto> Stores,
+    IReadOnlyList<SkillDto> Skills);
+
+public record AreaTransferCandidateDto(
+    int CasualProfileId,
+    string? EmployeeId,
+    string Name,
+    string City,
+    int CurrentZoneId,
+    string CurrentZoneName,
+    decimal Rating,
+    IReadOnlyList<string> Skills);
 
 public record AreaWorkforceAbsenceDto(
     int AbsenceId,

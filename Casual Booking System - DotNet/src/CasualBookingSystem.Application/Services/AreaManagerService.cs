@@ -38,121 +38,107 @@ public class AreaManagerService(
         return (user, zone);
     }
 
-    public async Task<AreaManagerDashboardDto> GetDashboardAsync(Guid userId, DateOnly date)
+    private static (DateOnly From, DateOnly ToExclusive) PeriodBounds(DateOnly anchor, string? period)
+    {
+        var mode = (period ?? "day").Trim().ToLowerInvariant();
+        return mode switch
+        {
+            "week" => Week(anchor),
+            "month" => (new DateOnly(anchor.Year, anchor.Month, 1), new DateOnly(anchor.Year, anchor.Month, 1).AddMonths(1)),
+            _ => (anchor, anchor.AddDays(1))
+        };
+
+        static (DateOnly, DateOnly) Week(DateOnly date)
+        {
+            var offset = ((int)date.DayOfWeek + 6) % 7;
+            var monday = date.AddDays(-offset);
+            return (monday, monday.AddDays(7));
+        }
+    }
+
+    public async Task<AreaManagerDashboardDto> GetDashboardAsync(Guid userId, DateOnly date, string period)
     {
         var (_, zone) = await Context(userId);
         var assignedStores = await stores.GetByZoneIdsAsync(new[] { zone.Id });
         var storeIds = assignedStores.Select(x => x.Id).ToArray();
-
-        var dayStart = date.ToDateTime(TimeOnly.MinValue);
-        var dayEnd = dayStart.AddDays(1);
-        var allBookings = await bookings.GetForStoresAsync(storeIds);
-        var budgetList = await budgets.GetRangeAsync(storeIds, date, date);
+        var bounds = PeriodBounds(date, period);
+        var from = bounds.From.ToDateTime(TimeOnly.MinValue);
+        var to = bounds.ToExclusive.ToDateTime(TimeOnly.MinValue);
+        var allBookings = (await bookings.GetForStoresAsync(storeIds))
+            .Where(x => x.StartDateTime < to && x.EndDateTime > from)
+            .ToList();
+        var budgetList = await budgets.GetRangeAsync(storeIds, bounds.From, bounds.ToExclusive.AddDays(-1));
 
         var staffingGaps = 0;
         decimal rosterCost = 0m;
+        var overBudgetStores = 0;
 
         foreach (var store in assignedStores)
         {
-            var roster = await employees.GetRosterAsync(store.Id, dayStart, dayEnd);
-            var absences = await employees.GetAbsencesAsync(store.Id, dayStart, dayEnd);
+            var roster = await employees.GetRosterAsync(store.Id, from, to);
+            var absences = await employees.GetAbsencesAsync(store.Id, from, to);
+            var storeRosterCost = roster.Where(x => !x.IsCancelled).Sum(x => x.EstimatedCost);
+            var storeCasualCost = allBookings
+                .Where(x => x.StoreId == store.Id && x.Status is BookingStatus.Accepted or BookingStatus.Completed)
+                .Sum(x => x.EstimatedCost);
+            var budget = budgetList.Where(x => x.StoreId == store.Id).Sum(x => x.Amount);
 
-            rosterCost += roster.Where(x => !x.IsCancelled).Sum(x => x.EstimatedCost);
-
-            staffingGaps += roster.Count(r =>
-                !r.IsCancelled &&
-                absences.Any(a => a.EmployeeId == r.EmployeeId && a.StartDateTime < r.EndDateTime && a.EndDateTime > r.StartDateTime));
+            rosterCost += storeRosterCost;
+            staffingGaps += roster.Count(r => !r.IsCancelled && absences.Any(a => a.EmployeeId == r.EmployeeId && a.StartDateTime < r.EndDateTime && a.EndDateTime > r.StartDateTime));
+            if (budget > 0 && storeRosterCost + storeCasualCost > budget) overBudgetStores++;
         }
 
         var casualCost = allBookings
             .Where(x => x.Status is BookingStatus.Accepted or BookingStatus.Completed)
-            .Where(x => x.StartDateTime < dayEnd && x.EndDateTime > dayStart)
             .Sum(x => x.EstimatedCost);
 
-        var overBudgetStores = 0;
-        foreach (var store in assignedStores)
-        {
-            var budget = budgetList.FirstOrDefault(x => x.StoreId == store.Id)?.Amount ?? 0m;
-            if (budget <= 0) continue;
-
-            var storeRosterCost = (await employees.GetRosterAsync(store.Id, dayStart, dayEnd))
-                .Where(x => !x.IsCancelled)
-                .Sum(x => x.EstimatedCost);
-
-            var storeCasualCost = allBookings
-                .Where(x => x.StoreId == store.Id)
-                .Where(x => x.Status is BookingStatus.Accepted or BookingStatus.Completed)
-                .Where(x => x.StartDateTime < dayEnd && x.EndDateTime > dayStart)
-                .Sum(x => x.EstimatedCost);
-
-            if (storeRosterCost + storeCasualCost > budget) overBudgetStores++;
-        }
-
         var availableCasuals = 0;
-        foreach (var casual in (await casuals.SearchAsync(null, null))
-                     .Where(x => x.IsActive && x.RegistrationStatus == RegistrationStatus.Approved && x.CurrentZoneId.HasValue && x.CurrentZoneId.Value == zone.Id))
+        foreach (var casual in (await casuals.SearchAsync(zone.City, null))
+                     .Where(x => x.IsActive && x.RegistrationStatus == RegistrationStatus.Approved && x.CurrentZoneId == zone.Id))
         {
-            var availability = await casuals.GetAvailabilityAsync(casual.Id, dayStart, dayEnd);
-            if (availability.Any(x => x.StartDateTime < dayEnd && x.EndDateTime > dayStart))
+            var availability = await casuals.GetAvailabilityAsync(casual.Id, from, to);
+            if (availability.Any(x => x.StartDateTime < to && x.EndDateTime > from))
                 availableCasuals++;
         }
 
         return new AreaManagerDashboardDto(
-            zone.Id,
-            zone.Name,
-            zone.City,
-            assignedStores.Count,
-            staffingGaps,
+            zone.Id, zone.Name, zone.City, bounds.From, bounds.ToExclusive.AddDays(-1),
+            assignedStores.Count, staffingGaps,
             allBookings.Count(x => x.Status == BookingStatus.Pending),
             allBookings.Count(x => x.Status == BookingStatus.Accepted),
-            availableCasuals,
-            overBudgetStores,
-            rosterCost + casualCost);
+            availableCasuals, overBudgetStores, rosterCost + casualCost);
     }
 
-    public async Task<IReadOnlyList<AreaStoreSummaryDto>> GetStoresAsync(Guid userId, DateOnly date)
+    public async Task<IReadOnlyList<AreaStoreSummaryDto>> GetStoresAsync(Guid userId, DateOnly date, string period)
     {
         var (_, zone) = await Context(userId);
         var assignedStores = await stores.GetByZoneIdsAsync(new[] { zone.Id });
-        var dayStart = date.ToDateTime(TimeOnly.MinValue);
-        var dayEnd = dayStart.AddDays(1);
+        var bounds = PeriodBounds(date, period);
+        var from = bounds.From.ToDateTime(TimeOnly.MinValue);
+        var to = bounds.ToExclusive.ToDateTime(TimeOnly.MinValue);
         var result = new List<AreaStoreSummaryDto>();
 
         foreach (var store in assignedStores)
         {
-            var roster = await employees.GetRosterAsync(store.Id, dayStart, dayEnd);
-            var absences = await employees.GetAbsencesAsync(store.Id, dayStart, dayEnd);
-            var storeBookings = await bookings.GetForStoreAsync(store.Id);
-            var budget = await budgets.GetAsync(store.Id, date);
+            var roster = await employees.GetRosterAsync(store.Id, from, to);
+            var absences = await employees.GetAbsencesAsync(store.Id, from, to);
+            var storeBookings = (await bookings.GetForStoreAsync(store.Id))
+                .Where(x => x.StartDateTime < to && x.EndDateTime > from)
+                .ToList();
+            var budgetRange = await budgets.GetRangeAsync(new[] { store.Id }, bounds.From, bounds.ToExclusive.AddDays(-1));
 
-            var gaps = roster.Count(r =>
-                !r.IsCancelled &&
-                absences.Any(a => a.EmployeeId == r.EmployeeId && a.StartDateTime < r.EndDateTime && a.EndDateTime > r.StartDateTime));
-
+            var gaps = roster.Count(r => !r.IsCancelled && absences.Any(a => a.EmployeeId == r.EmployeeId && a.StartDateTime < r.EndDateTime && a.EndDateTime > r.StartDateTime));
             var cost = roster.Where(x => !x.IsCancelled).Sum(x => x.EstimatedCost) +
-                       storeBookings
-                           .Where(x => x.Status is BookingStatus.Accepted or BookingStatus.Completed)
-                           .Where(x => x.StartDateTime < dayEnd && x.EndDateTime > dayStart)
-                           .Sum(x => x.EstimatedCost);
-
-            var budgetAmount = budget?.Amount ?? 0m;
+                       storeBookings.Where(x => x.Status is BookingStatus.Accepted or BookingStatus.Completed).Sum(x => x.EstimatedCost);
+            var budgetAmount = budgetRange.Sum(x => x.Amount);
             var variance = budgetAmount - cost;
             var status = budgetAmount == 0 ? "Not Set" : variance > 0 ? "Under Budget" : variance < 0 ? "Over Budget" : "Exact Budget";
 
             result.Add(new AreaStoreSummaryDto(
-                store.Id,
-                store.Code,
-                store.Name,
-                store.City,
-                store.ZoneId,
-                store.Zone?.Name ?? string.Empty,
-                gaps,
-                storeBookings.Count(x => x.Status == BookingStatus.Pending),
+                store.Id, store.Code, store.Name, store.City, store.ZoneId, store.Zone?.Name ?? zone.Name,
+                gaps, storeBookings.Count(x => x.Status == BookingStatus.Pending),
                 storeBookings.Count(x => x.Status == BookingStatus.Accepted),
-                budgetAmount,
-                cost,
-                variance,
-                status));
+                budgetAmount, cost, variance, status));
         }
 
         return result.OrderByDescending(x => x.StaffingGaps).ThenBy(x => x.StoreName).ToList();
@@ -195,25 +181,53 @@ public class AreaManagerService(
         return result.OrderBy(x => x.StartDateTime).ToList();
     }
 
-    public async Task<IReadOnlyList<AreaCasualDto>> SearchCasualsAsync(
-        Guid userId,
-        string? city,
-        string? search,
-        DateTime start,
-        DateTime end)
+    public async Task<AreaCasualSearchFiltersDto> GetCasualSearchFiltersAsync(Guid userId)
     {
         var (_, zone) = await Context(userId);
-        ServiceHelpers.Hours(start, end);
+        var sameCityZones = (await zones.GetAllAsync())
+            .Where(x => x.IsActive && string.Equals(x.City, zone.City, StringComparison.OrdinalIgnoreCase) && x.Id != zone.Id)
+            .OrderBy(x => x.Name)
+            .Select(x => new ZoneDto(x.Id, x.Name, x.City, x.IsActive))
+            .ToList();
+        var assignedStores = (await stores.GetByZoneIdsAsync(new[] { zone.Id }))
+            .Where(x => x.IsActive && x.RegistrationStatus == RegistrationStatus.Approved)
+            .OrderBy(x => x.Name)
+            .Select(x => new AreaStoreOptionDto(x.Id, x.Code, x.Name))
+            .ToList();
+        var skillRows = (await skills.GetAllAsync()).Where(x => x.IsActive).OrderBy(x => x.Name)
+            .Select(x => new SkillDto(x.Id, x.Name)).ToList();
 
-        var allZones = (await zones.GetAllAsync()).ToDictionary(x => x.Id, x => x.Name);
+        return new AreaCasualSearchFiltersDto(zone.City, zone.Id, zone.Name, sameCityZones, assignedStores, skillRows);
+    }
+
+    public async Task<IReadOnlyList<AreaCasualDto>> SearchCasualsAsync(
+        Guid userId, string? city, string? search, DateTime start, DateTime end, int? zoneId = null, IReadOnlyList<int>? skillIds = null)
+    {
+        var (_, managedZone) = await Context(userId);
+        var paidHours = ServiceHelpers.PaidHours(start, end);
+
+        if (!string.IsNullOrWhiteSpace(city) && !string.Equals(city.Trim(), managedZone.City, StringComparison.OrdinalIgnoreCase))
+            throw new BusinessRuleException($"Area Managers in {managedZone.City} cannot search or book Casuals in another city.");
+
+        var sameCityZones = (await zones.GetAllAsync())
+            .Where(x => x.IsActive && string.Equals(x.City, managedZone.City, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(x => x.Id);
+        if (zoneId.HasValue && (!sameCityZones.ContainsKey(zoneId.Value) || zoneId.Value == managedZone.Id))
+            throw new BusinessRuleException("Selected zone must be another active zone in the Area Manager's city.");
+
+        var managedStores = await stores.GetByZoneIdsAsync(new[] { managedZone.Id });
+        var managedStoreIds = managedStores.Select(x => x.Id).ToArray();
+        var selectedSkills = skillIds?.Where(x => x > 0).Distinct().ToHashSet() ?? new HashSet<int>();
         var result = new List<AreaCasualDto>();
 
-        foreach (var casual in (await casuals.SearchAsync(city, null))
-                     .Where(x => x.IsActive &&
-                                 x.RegistrationStatus == RegistrationStatus.Approved &&
-                                 x.CurrentZoneId.HasValue &&
-                                 x.CurrentZoneId.Value == zone.Id))
+        foreach (var casual in (await casuals.SearchAsync(managedZone.City, null))
+                     .Where(x => x.IsActive && x.RegistrationStatus == RegistrationStatus.Approved && x.CurrentZoneId.HasValue))
         {
+            if (!sameCityZones.TryGetValue(casual.CurrentZoneId!.Value, out var currentZone)) continue;
+            if (casual.CurrentZoneId.Value == managedZone.Id) continue;
+            if (zoneId.HasValue && casual.CurrentZoneId.Value != zoneId.Value) continue;
+            if (selectedSkills.Count > 0 && !selectedSkills.All(id => casual.Skills.Any(x => x.SkillId == id))) continue;
+
             var account = await users.GetByIdAsync(casual.UserId);
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -226,20 +240,41 @@ public class AreaManagerService(
 
             var available = await casuals.IsAvailableAsync(casual.Id, start, end) &&
                             !await bookings.HasAcceptedOverlapAsync(casual.Id, start, end);
+            var activeRequestExists = false;
+            foreach (var storeId in managedStoreIds)
+            {
+                if (await bookings.HasDuplicateActiveRequestAsync(storeId, casual.Id, start, end))
+                {
+                    activeRequestExists = true;
+                    break;
+                }
+            }
+            var rate = casual.BaseHourlyRate.HasValue ? ServiceHelpers.EffectiveHourlyRate(casual.BaseHourlyRate.Value, EmployeeType.Casual, start) : (decimal?)null;
+            var estimated = rate.HasValue ? decimal.Round(rate.Value * paidHours, 2, MidpointRounding.AwayFromZero) : (decimal?)null;
 
             result.Add(new AreaCasualDto(
-                casual.Id,
-                account?.EmployeeId,
-                $"{casual.FirstName} {casual.LastName}",
-                casual.City,
-                casual.CurrentZoneId!.Value,
-                allZones.GetValueOrDefault(casual.CurrentZoneId.Value, string.Empty),
-                casual.RatingAverage,
+                casual.Id, account?.EmployeeId, $"{casual.FirstName} {casual.LastName}", casual.City, casual.Phone,
+                casual.CurrentZoneId.Value, currentZone.Name, casual.RatingAverage,
                 casual.Skills.Select(x => x.Skill?.Name ?? string.Empty).Where(x => x.Length > 0).ToList(),
-                available));
+                available, activeRequestExists, casual.BaseHourlyRate, rate, paidHours, estimated));
         }
 
-        return result.OrderByDescending(x => x.IsAvailable).ThenByDescending(x => x.Rating).ToList();
+        return result.OrderByDescending(x => x.IsAvailable).ThenByDescending(x => x.Rating).ThenBy(x => x.Name).ToList();
+    }
+
+    public async Task<IReadOnlyList<AreaTransferCandidateDto>> GetTransferCandidatesAsync(Guid userId)
+    {
+        var (_, zone) = await Context(userId);
+        var result = new List<AreaTransferCandidateDto>();
+        foreach (var casual in (await casuals.SearchAsync(zone.City, null))
+                     .Where(x => x.IsActive && x.RegistrationStatus == RegistrationStatus.Approved && x.CurrentZoneId == zone.Id))
+        {
+            var account = await users.GetByIdAsync(casual.UserId);
+            result.Add(new AreaTransferCandidateDto(casual.Id, account?.EmployeeId,
+                $"{casual.FirstName} {casual.LastName}", casual.City, zone.Id, zone.Name, casual.RatingAverage,
+                casual.Skills.Select(x => x.Skill?.Name ?? string.Empty).Where(x => x.Length > 0).ToList()));
+        }
+        return result.OrderBy(x => x.Name).ToList();
     }
 
     public async Task<IReadOnlyList<BookingDto>> GetBookingsAsync(Guid userId)
@@ -264,6 +299,8 @@ public class AreaManagerService(
 
         var destination = await zones.GetByIdAsync(request.ToZoneId) ?? throw new BusinessRuleException("Destination zone not found.");
         if (!destination.IsActive) throw new BusinessRuleException("Destination zone is inactive.");
+        if (!string.Equals(destination.City, zone.City, StringComparison.OrdinalIgnoreCase))
+            throw new BusinessRuleException($"Casuals in {zone.City} cannot be transferred to another city.");
 
         var casual = await casuals.GetByIdAsync(request.CasualProfileId) ?? throw new BusinessRuleException("Casual not found.");
         if (casual.CurrentZoneId != zone.Id)
@@ -390,6 +427,15 @@ public class AreaManagerService(
         var casual = await casuals.GetByIdAsync(request.CasualProfileId) ?? throw new BusinessRuleException("Casual not found.");
         if (!casual.IsActive || casual.RegistrationStatus != RegistrationStatus.Approved || !await users.IsApprovedAndActiveAsync(casual.UserId))
             throw new BusinessRuleException("Casual is not active and approved.");
+        if (!string.Equals(store.City, zone.City, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(casual.City, zone.City, StringComparison.OrdinalIgnoreCase))
+            throw new BusinessRuleException($"Area Managers in {zone.City} cannot book Casuals into another city.");
+        if (casual.CurrentZoneId.HasValue)
+        {
+            var casualZone = await zones.GetByIdAsync(casual.CurrentZoneId.Value);
+            if (casualZone is null || !string.Equals(casualZone.City, zone.City, StringComparison.OrdinalIgnoreCase))
+                throw new BusinessRuleException($"Area Managers in {zone.City} cannot book Casuals from another city.");
+        }
 
         var paidHours = ServiceHelpers.PaidHours(request.StartDateTime, request.EndDateTime);
 
